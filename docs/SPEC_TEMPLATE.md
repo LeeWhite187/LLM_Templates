@@ -2,10 +2,9 @@
 
 **Project:** [Project name]
 **Short description:** [One sentence. What this system is, in plain language.]
-**Author:** [Name of the engineer who initiated the document. Not updated on revision.]
 **Status:** [Draft | In Design | Pre-Implementation | Implementing | Stable | Superseded]
+**Revision:** [Integer. The initial published version is `1`. Each subsequent published change increments by one. Must match the highest-numbered entry in the Revision Log.]
 **Created:** [ISO-8601 datetime, e.g., 2026-05-06T14:30:00Z]
-**Last Updated:** [ISO-8601 datetime — must match the timestamp of the most recent Revision Log entry]
 **Related Documents:** [Other specs this document references or is referenced by, with relative paths. Omit the field if none.]
 
 ---
@@ -124,7 +123,7 @@ The goal is that a reader (human or CLI) can confirm, section by section, that e
 
 SHALL is the default and the strong preference for all requirement statements. A well-formed requirement does not hedge — if a behavior is conditional, the condition belongs inside the SHALL: "When X occurs, the system shall Y" rather than "The system should Y." SHOULD and MAY are available if a requirement genuinely cannot be expressed in conditional SHALL form, but the author should attempt the rewrite first.
 
-**Timestamp consistency.** The `Last Updated` field in the title block must match the timestamp of the most recent entry in the Revision Log (§14). Any spec edit that warrants a `Last Updated` change shall also produce a corresponding Revision Log entry. The two values are kept in lockstep.
+**Revision consistency.** The `Revision` field in the title block must match the highest-numbered entry in the Revision Log (§14). Any spec edit that bumps the revision number shall also produce a corresponding Revision Log entry, and vice versa. The two values are kept in lockstep.
 
 ---
 
@@ -480,17 +479,21 @@ Open items are resolved by either updating the spec to address them (closing the
 
 ## 14. Revision Log
 
-[A reverse-chronological list of substantive changes to the spec. Each entry is a section heading dated with an ISO-8601 timestamp, followed by a narrative description of what changed and why.
+[A chronological list of substantive changes to the spec, in append order — oldest entry first, most recent entry last. Each entry is identified by an integer revision number. The initial published version of the spec is Revision 1; each subsequent published change increments the revision by one.
 
-The most recent entry's timestamp shall match the `Last Updated` field in the title block. Any spec edit that warrants updating `Last Updated` shall produce a corresponding entry here.
+The highest-numbered entry's revision number shall match the `Revision` field in the title block. Any spec edit that bumps the revision shall produce a corresponding entry here, and vice versa. The two are kept in lockstep.
+
+Each entry carries an ISO-8601 timestamp as a field within the entry, so the temporal history of the spec is preserved without echoing the timestamp into the title block. A reader who wants the date of the most recent revision finds it at the bottom of this section.
 
 Format:
 
-### YYYY-MM-DDTHH:MM:SSZ
+### Revision NN
+
+**Date:** YYYY-MM-DDTHH:MM:SSZ
 
 [Narrative description of the changes in this revision. Reference items by their identifier when relevant. Note when items are added, withdrawn, or substantially reworded. Note when sections are added or substantially restructured. Note when KDs are added or revisited and when OIs are opened, flagged, or closed.
 
-Trivial edits (typo fixes, formatting cleanups) do not earn revision log entries — they happen silently and do not bump the `Last Updated` timestamp.]
+Trivial edits (typo fixes, formatting cleanups) do not earn revision log entries — they happen silently and do not bump the revision number.]
 
 ---
 
