@@ -75,7 +75,7 @@ Project work happens across two Claude instances with distinct, complementary ro
 This pattern has a few properties worth naming:
 
 - **The spec is the handoff artifact.** Not the chat history, not screenshots, not verbal recollection. If something matters, it is in the spec. If it is not in the spec, it does not yet officially exist.
-- **The spec and its referenced template revision are self-sufficient as a pair.** A CLI reading the spec cold, with no chat history, should be able to implement from the spec together with the template revision the spec adheres to (named in the spec's `Template Revision` title-block field). The chat history is not required; the template is. This shapes how the spec is written: explicit, declarative, concrete. Anything that exists only in the design conversation has not yet been captured properly.
+- **The spec must be self-sufficient.** A CLI reading the spec cold, with no chat history, should be able to implement from it. This shapes how the spec is written: explicit, declarative, concrete. Anything that exists only in the design conversation has not yet been captured properly.
 - **The two agents do not communicate directly.** No autonomous handoff, no shared memory. The user is always the explicit connection. This is intentional — it keeps the spec as the durable artifact and prevents context drift between the two instances.
 
 ---
@@ -131,23 +131,9 @@ The Revision Log is the auditable history of *why the design is what it is*. Fut
 
 ---
 
-## 7. Structural transforms and downstream references
+## 7. Item identifier discipline
 
-A structural transform — removing a field from the title block, reordering entries in the revision log, renaming an identifier scheme, migrating a spec from one template revision to another — can have semantic consequences in content that the transform does not directly edit. The transform's mechanical scope is bounded; its semantic reach is not.
-
-Two examples make this concrete. First, removing the `Last Updated` field from the title block invalidates any prose elsewhere in the spec that references that field — such as a convention saying "the Last Updated field shall match the most recent revision log entry." Second, reversing the order of revision log entries invalidates any prose inside those entries that uses positional language ("the entry above") or that references other entries by bare timestamp — both fragile under reordering.
-
-The principle: **a structural transform must include a detect-and-report obligation for downstream references to the changed elements.** The transform does not silently edit content outside its scope — that would be improvisation, and improvisation is what the methodology guards against. It also does not let stale references ship invisibly — that would be silent drift, and silent drift is what congruency-check Open Items exist to prevent. Instead, it scans for downstream references, surfaces them to the operator, and the operator decides whether to fix them, leave them, or escalate them to a wider revision.
-
-This obligation applies to any migration instruction — between template revisions, between methodology revisions, between identifier schemes. When designing a migration instruction, ask: *what does this transform touch that lives outside its permitted region?* The answer is the list of detect-and-report checks the instruction must include.
-
-A useful framing: the instruction's "what NOT to change" boundary and its "detect and report" obligation are complementary. The first prevents the agent from improvising; the second prevents the agent from being negligent. A migration that has the first without the second produces silent stale references. Both are required.
-
----
-
-## 8. Item identifier discipline
-
-Items in the spec (UR, FR, NFR, KD, OI) are identified with a type prefix and a stable number. The detailed rules are in the Conventions section of `SPEC_TEMPLATE.md` at the revision the spec adheres to. The methodology adds two pieces of context:
+Items in the spec (UR, FR, NFR, KD, OI) are identified with a type prefix and a stable number. The detailed rules are in `SPEC_TEMPLATE.md` §1.9. The methodology adds two pieces of context:
 
 **Numbers are addresses.** When the spec says "as required by FR-12," that reference must continue to point at the same requirement across all revisions of the spec. Renumbering would invalidate every reference to the renumbered item — including references in code comments, commit messages, ticket trackers, and external documents. Therefore: numbers are stable, never reused, never reassigned.
 
@@ -157,7 +143,7 @@ The discipline is small but load-bearing. A spec where numbers wander is a spec 
 
 ---
 
-## 9. Diligence is visible
+## 8. Diligence is visible
 
 A spec produced under this methodology demonstrates *thinking* in two ways: through the content of its sections, and through the explicit handling of sections that do not apply.
 
@@ -169,7 +155,7 @@ The principle generalizes beyond unused sections: deliberation is part of the de
 
 ---
 
-## 10. Audience and voice
+## 9. Audience and voice
 
 Specs produced under this methodology have two audiences: the design partnership (the user and web Claude), and the implementing CLI. The voice is shaped by both.
 
@@ -179,11 +165,11 @@ Specs produced under this methodology have two audiences: the design partnership
 
 **Spare with adjectives, generous with rationale.** "Robust," "scalable," "maintainable" tend to communicate enthusiasm rather than substance. The methodology prefers "the system shall handle [specific failure mode] by [specific behavior]." Rationale, on the other hand, is welcome — Key Decisions exist precisely so the reasoning behind a choice is preserved alongside the choice itself.
 
-**Written for the implementing CLI as a primary reader.** This shapes the spec in concrete ways: explicit cross-references rather than allusions, full names rather than pronouns, the `Template Revision` field in the title block naming which revision of the template's conventions the spec adheres to. A CLI reading the spec, together with the referenced template revision, should be able to derive the rules of how to read the spec from those two documents alone.
+**Written for the implementing CLI as a primary reader.** This shapes the spec in concrete ways: explicit cross-references rather than allusions, full names rather than pronouns, the rules of the document stated explicitly in §1.9. A CLI reading the spec without prior context should be able to derive the rules of how to read it from the document itself.
 
 ---
 
-## 11. The relationship between this document and the spec template
+## 10. The relationship between this document and the spec template
 
 `METHODOLOGY.md` (this document) and `SPEC_TEMPLATE.md` are companion documents:
 
