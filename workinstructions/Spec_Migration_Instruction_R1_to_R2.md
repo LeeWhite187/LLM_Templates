@@ -93,7 +93,7 @@ Under Template Revision 1, each spec contained a full conventions block embedded
 
 This spec adheres to the conventions defined in `SPEC_TEMPLATE.md` at the revision identified by the `Template Revision` field in this spec's title block. See the Conventions section of that document for identifier rules, number stability, requirement language, table usage, revision consistency, intra-log cross-references, and other conventions governing this spec.
 
-The conventions are not duplicated here. The template is the single source of truth for the rules a spec follows; this spec references the template revision it was authored under, and migrations to newer template revisions are deliberate (see `SPEC_RETROFIT_INSTRUCTION.md`).
+The conventions are not duplicated here. The template is the single source of truth for the rules a spec follows; this spec references the template revision it was authored under, and migrations to newer template revisions are deliberate (see `Spec_Migration_Instruction_R1_to_R2.md`).
 ```
 
 Do not preserve any part of the existing §1.9 content. The reference model deliberately externalizes the conventions; preserving fragments of the old block would undermine the single-source-of-truth property.
