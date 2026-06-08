@@ -122,9 +122,11 @@ The spec is a living document during a project's design and implementation phase
 
 **Decision revisitation.** A Key Decision is reopened because new information has surfaced — a library has a bug, a constraint has changed, a tradeoff is now better understood. The KD is revised in place; alternatives and consequences are updated; the Revision Log notes what shifted.
 
+**Maintenance sweep.** A periodic pass through the spec to bring it back into alignment with the forward-looking-reference principle (§9). The sweep tombstones closed items, replaces stale body prose with pointers to the current state, and validates that what remains describes current intent. Sweeps are triggered by accumulated drift, by a substantial design revision, or by reports from downstream consumers (other Claude chats, the CLI, external readers) that the spec is hard to derive current state from. A sweep is a substantive change and earns a Revision Log entry.
+
 A few things that are *not* spec revisions:
 
-- **Trivial edits.** Typo fixes, formatting cleanups, and rewording for clarity do not earn Revision Log entries and do not bump the Last Updated timestamp. They happen silently. The threshold is whether the change conveys anything to a reader who has read the previous version.
+- **Trivial edits.** Typo fixes, formatting cleanups, and rewording for clarity do not earn Revision Log entries and do not bump the spec's Revision number. They happen silently. The threshold is whether the change conveys anything to a reader who has read the previous version.
 - **Code-level decisions made during implementation.** Choosing a variable name, picking between two equally valid algorithms, selecting a logging format — these are implementation choices, not design decisions, and live in the code, not the spec.
 
 The Revision Log is the auditable history of *why the design is what it is*. Future readers — including future-self — should be able to read the log and understand how the spec arrived at its current state.
@@ -147,17 +149,37 @@ A useful framing: the instruction's "what NOT to change" boundary and its "detec
 
 ## 8. Item identifier discipline
 
-Items in the spec (UR, FR, NFR, KD, OI) are identified with a type prefix and a stable number. The detailed rules are in the Conventions section of `SPEC_TEMPLATE.md` at the revision the spec adheres to. The methodology adds two pieces of context:
+Items in the spec (UR, FR, NFR, KD, OI) are identified with a type prefix and a stable number. The detailed rules are in the Conventions section of `SPEC_TEMPLATE.md` at the revision the spec adheres to. The methodology adds three pieces of context:
 
 **Numbers are addresses.** When the spec says "as required by FR-12," that reference must continue to point at the same requirement across all revisions of the spec. Renumbering would invalidate every reference to the renumbered item — including references in code comments, commit messages, ticket trackers, and external documents. Therefore: numbers are stable, never reused, never reassigned.
 
-**Withdrawn items remain in place.** A withdrawn item carries its number as a permanent record that the number is taken. New items always take `max(existing_number) + 1` for their type, where the maximum includes withdrawn entries. This rule is mechanical — the implementing CLI can rely on it when generating new identifiers.
+**Terminal items remain in place as tombstones.** An item that reaches a terminal disposition — withdrawn, superseded, closed, cancelled — is not deleted from its section. It remains in place with its identifier and a disposition tag in the heading: `### FR-07 — (Withdrawn)`, `### KD-03 — (Superseded by KD-09)`, `### OI-12 — (Closed; resolved by §6.4)`. The body of a tombstoned item is empty or carries at most a one-sentence pointer to where the resolution lives. Full rationale for the disposition belongs in the Revision Log entry that effected it, not in the tombstone's body. This rule applies universally across item types (UR, FR, NFR, KD, OI); the same discipline keeps the spec scannable for current state regardless of which item type was retired.
 
-The discipline is small but load-bearing. A spec where numbers wander is a spec that cannot be trusted as a reference.
+**New items always take the next number.** New items take `max(existing_number) + 1` for their type, where the maximum includes all tombstoned entries. This rule is mechanical — the implementing CLI can rely on it when generating new identifiers.
+
+The discipline is small but load-bearing. A spec where numbers wander is a spec that cannot be trusted as a reference. A spec whose terminal items carry their old bodies is a spec whose keyword search returns ghosts.
 
 ---
 
-## 9. Diligence is visible
+## 9. Forward-looking reference, not a history book
+
+The spec describes the system as currently designed. It does not describe how the system used to be designed, what alternatives were considered before the current design was reached, or what content was previously true and is no longer. Content that does not describe current intent belongs in the Revision Log, not in the body.
+
+This is a principle, not a rule of housekeeping. Downstream consumers of the spec — other Claude chat sessions, the implementing CLI, future readers including future-self — derive current state by reading the body and searching it for relevant content. Every sentence in the body that does not describe current intent is a sentence that can be hit by a keyword search and lead the consumer to confusion. Closed Open Items with their original bodies still present are the most common offender; stale prose in section bodies is another; old terminology that the spec has since revised away is a third. The principle directs all of them: out of the body, into the log (or out entirely, with a Revision Log entry recording the removal).
+
+The principle has several concrete consequences elsewhere in the methodology and template:
+
+- **Tombstoning** (see §8). Items at terminal disposition carry only their identifier and disposition tag; bodies collapse to at most a one-sentence pointer.
+- **The maintenance sweep** (see §6). The periodic activity that operationalizes this principle — going through the spec and bringing it back into forward-looking shape when drift has accumulated.
+- **The implementation guide convention** (see `IMPLEMENTATION_GUIDE_TEMPLATE.md`). Guides apply the same principle more strictly, with no revision log in their body at all, because consumer tolerance for sediment is lower than the design partnership's.
+
+A useful test when deciding whether content earns its place in the body: *will a reader six months from now, searching this document for "how does X work today," benefit from this sentence?* If yes, it earns its place. If the sentence describes how X used to work, or why we don't do X anymore, the answer is no — and the sentence belongs in the Revision Log entry that effected the change, not in the body.
+
+The principle applies to specs first and most directly. It applies to implementation guides with even more force, because guides are pure consumer references and have no equivalent of the spec's "history is preserved in the log" affordance. It applies less to working documents like the methodology and templates, which legitimately carry their own evolution history because their audience benefits from it.
+
+---
+
+## 10. Diligence is visible
 
 A spec produced under this methodology demonstrates *thinking* in two ways: through the content of its sections, and through the explicit handling of sections that do not apply.
 
@@ -169,7 +191,7 @@ The principle generalizes beyond unused sections: deliberation is part of the de
 
 ---
 
-## 10. Audience and voice
+## 11. Audience and voice
 
 Specs produced under this methodology have two audiences: the design partnership (the user and web Claude), and the implementing CLI. The voice is shaped by both.
 
@@ -183,16 +205,19 @@ Specs produced under this methodology have two audiences: the design partnership
 
 ---
 
-## 11. The relationship between this document and the spec template
+## 12. The relationship between this document, the spec template, and the implementation guide template
 
-`METHODOLOGY.md` (this document) and `SPEC_TEMPLATE.md` are companion documents:
+This document and `SPEC_TEMPLATE.md` and `IMPLEMENTATION_GUIDE_TEMPLATE.md` are companion documents:
 
-- **The methodology document is procedural.** How we work. The thesis, the project order, the two-agent pattern, the spec-as-contract rule, the congruency-check pattern, the discipline around revision and identifier stability.
-- **The spec template is structural.** What an individual project spec looks like. The sections, the conventions, the formats, the section-level prompts.
+- **The methodology document is procedural.** How we work. The thesis, the project order, the two-agent pattern, the spec-as-contract rule, the congruency-check pattern, the forward-looking-reference principle, the discipline around revision and identifier stability.
+- **The spec template is structural for the build side.** What an individual project spec looks like — the artifact the design partnership produces and the implementing CLI consumes.
+- **The implementation guide template is structural for the use side.** What an individual library's implementation guide looks like — the artifact downstream consumers (other Claude chat sessions, you, external developers) consume to use the library.
 
-Project conversations refer to the methodology when discussing *how* to proceed; they refer to the template when shaping *what* the spec looks like.
+The spec and the guide describe the same library from different angles. The spec is the design record (how and why the library is built). The guide is the use reference (how to consume the library successfully). They are anchored to each other: the guide names a specific spec revision via its `Spec` field, which makes guide-vs-spec drift detectable.
 
-Both documents are maintained in a public GitHub repository and revised out-of-band — not within project conversations. A project conversation may surface ideas for revising either document; those ideas are noted by the user and applied later, on the user's editing timeline. This keeps the standing documents stable across projects and prevents per-project drift.
+Project conversations refer to the methodology when discussing *how* to proceed. They refer to the spec template when shaping *what* the spec looks like. They refer to the implementation guide template only when producing or revising a library's implementation guide.
+
+All three documents are maintained in a public GitHub repository and revised out-of-band — not within project conversations. A project conversation may surface ideas for revising any of them; those ideas are noted by the user and applied later, on the user's editing timeline. This keeps the standing documents stable across projects and prevents per-project drift.
 
 ---
 
