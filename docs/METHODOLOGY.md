@@ -90,7 +90,7 @@ The project spec is the authoritative source of truth for implementation. This i
 
 **The spec describes the system as intended.** Not as it currently exists, not as it might someday become. The spec is the design commitment at the current revision; the code is what realizes it. When the two diverge, the divergence is either a bug (code does not match spec) or an opportunity for spec revision (the spec no longer reflects the intended design). It is never just left as a divergence to live with.
 
-**Specs are versioned by timestamp and revision log.** The Last Updated field in the spec's title block matches the timestamp of the most recent Revision Log entry. Every substantive change to the spec earns a Revision Log entry describing what changed and why. This makes the spec's history auditable — a future reader can reconstruct the design's evolution.
+**Specs are versioned by Revision number and Git history.** The spec's `Revision` field in the title block identifies a stable state of the document for cross-document references. It bumps at publication moments — handoff to the CLI, share with another Claude session, shelving for future resumption (see §6 for the full publication-bump model). The spec's evolution — what changed between revisions, when, and why — lives in Git: commit messages capture the *why*, diffs capture the *what*, and version control captures the chronology. The spec itself carries no in-document revision log; the body describes the system as currently designed, and history is recovered from Git when needed.
 
 ---
 
@@ -112,24 +112,27 @@ To guard against this, the design conversation deliberately plants **congruency-
 
 ---
 
-## 6. Spec evolution: what triggers a revision
+## 6. Spec evolution: continuous edits and publication bumps
 
-The spec is a living document during a project's design and implementation phases. Revisions happen for several reasons, each with a different shape:
+The spec is a living document during a project's design and implementation phases. It is edited continuously during design conversations as understanding evolves. None of those continuous edits bump the spec's Revision number.
 
-**Design-conversation revision.** Web chat and the user discuss a topic and reach a new conclusion. The spec is updated to reflect it. Items are added, withdrawn, or reworded. Sections are restructured. A Revision Log entry captures the change and its rationale.
+A Revision bump happens when the spec crosses a **publication boundary** — when the document leaves the design conversation and reaches an external reader who needs a stable reference to its state:
 
-**Implementation-discovery revision.** The CLI finds friction and the user brings it back to web chat. The design conversation evaluates the friction and decides whether to revise the spec. If yes, the spec is updated and a congruency-check OI is planted if existing code is affected. If no, the friction is resolved by clarifying the spec without changing the design (the CLI's interpretation was wrong; the spec was always correct, just unclear).
+**Handoff to the implementing CLI.** The user takes the spec from the design conversation into the repository for Claude CLI to read. The CLI is a downstream consumer; the spec at this moment is the contract it works against. The Revision bumps to signal the new published state.
 
-**Decision revisitation.** A Key Decision is reopened because new information has surfaced — a library has a bug, a constraint has changed, a tradeoff is now better understood. The KD is revised in place; alternatives and consequences are updated; the Revision Log notes what shifted.
+**Share with another Claude session.** The user takes the spec into a different chat — for consultation, for review, for a sibling design conversation. Another session is a downstream consumer; the Revision bumps to signal what state of the spec it is reading.
 
-**Maintenance sweep.** A periodic pass through the spec to bring it back into alignment with the forward-looking-reference principle (§9). The sweep tombstones closed items, replaces stale body prose with pointers to the current state, and validates that what remains describes current intent. Sweeps are triggered by accumulated drift, by a substantial design revision, or by reports from downstream consumers (other Claude chats, the CLI, external readers) that the spec is hard to derive current state from. A sweep is a substantive change and earns a Revision Log entry.
+**Shelving at a stable state.** The user sets the spec down with the intention of returning to it later. The Revision bumps to mark "this is the settled state I'm leaving it at." A future resumption knows what version it is picking up.
 
-A few things that are *not* spec revisions:
+What does *not* bump the Revision:
 
-- **Trivial edits.** Typo fixes, formatting cleanups, and rewording for clarity do not earn Revision Log entries and do not bump the spec's Revision number. They happen silently. The threshold is whether the change conveys anything to a reader who has read the previous version.
-- **Code-level decisions made during implementation.** Choosing a variable name, picking between two equally valid algorithms, selecting a logging format — these are implementation choices, not design decisions, and live in the code, not the spec.
+- **Continuous edits during a single design conversation.** Items added, rewordings, restructurings, even significant design changes — none of these bump the Revision while the spec stays inside the conversation with no external reader in the loop.
+- **Trivial cleanups.** Typo fixes, formatting normalization, prose clarifications that do not change intent.
+- **Decisions that are revisited and the spec is updated.** The revisiting is part of design; the bump happens when the result is published.
 
-The Revision Log is the auditable history of *why the design is what it is*. Future readers — including future-self — should be able to read the log and understand how the spec arrived at its current state.
+The Revision number is a signal to downstream consumers, not a counter of effort or session activity. If there is no consumer in the loop, there is no audience for the signal, and the bump has no purpose. A small library whose spec stays inside the design conversation for a long stretch may legitimately remain at the same Revision through many edits; a larger system that hands off to the CLI repeatedly may bump frequently. The trigger is the consumer's need to know, not the spec's internal change rate.
+
+What lives in the spec body vs. version control: the spec body describes the system as currently designed. Git captures evolution — what changed, when, and (via commit messages) why. The two are complementary: the spec answers "what is the design?", Git answers "how did the design get this way?". There is no in-document revision log; that role belongs to version control entirely. (Exception: this methodology document and the spec template carry their own revision logs because they are meta-documents read by designers and migration authors, not by library consumers — see §12.)
 
 ---
 
@@ -153,7 +156,7 @@ Items in the spec (UR, FR, NFR, KD, OI) are identified with a type prefix and a 
 
 **Numbers are addresses.** When the spec says "as required by FR-12," that reference must continue to point at the same requirement across all revisions of the spec. Renumbering would invalidate every reference to the renumbered item — including references in code comments, commit messages, ticket trackers, and external documents. Therefore: numbers are stable, never reused, never reassigned.
 
-**Terminal items remain in place as tombstones.** An item that reaches a terminal disposition — withdrawn, superseded, closed, cancelled — is not deleted from its section. It remains in place with its identifier and a disposition tag in the heading: `### FR-07 — (Withdrawn)`, `### KD-03 — (Superseded by KD-09)`, `### OI-12 — (Closed; resolved by §6.4)`. The body of a tombstoned item is empty or carries at most a one-sentence pointer to where the resolution lives. Full rationale for the disposition belongs in the Revision Log entry that effected it, not in the tombstone's body. This rule applies universally across item types (UR, FR, NFR, KD, OI); the same discipline keeps the spec scannable for current state regardless of which item type was retired.
+**Terminal items remain in place as tombstones.** An item that reaches a terminal disposition — withdrawn, superseded, closed, cancelled — is not deleted from its section. It remains in place with its identifier and a disposition tag in the heading: `### FR-07 — (Withdrawn)`, `### KD-03 — (Superseded by KD-09)`, `### OI-12 — (Closed; resolved by §6.4)`. The body of a tombstoned item is empty or carries at most a one-sentence pointer to where the resolution lives. Full rationale for the disposition lives in the Git commit message that effected the change, not in the tombstone's body. This rule applies universally across item types (UR, FR, NFR, KD, OI); the same discipline keeps the spec scannable for current state regardless of which item type was retired.
 
 **New items always take the next number.** New items take `max(existing_number) + 1` for their type, where the maximum includes all tombstoned entries. This rule is mechanical — the implementing CLI can rely on it when generating new identifiers.
 
@@ -163,19 +166,19 @@ The discipline is small but load-bearing. A spec where numbers wander is a spec 
 
 ## 9. Forward-looking reference, not a history book
 
-The spec describes the system as currently designed. It does not describe how the system used to be designed, what alternatives were considered before the current design was reached, or what content was previously true and is no longer. Content that does not describe current intent belongs in the Revision Log, not in the body.
+The spec describes the system as currently designed. It does not describe how the system used to be designed, what alternatives were considered before the current design was reached, or what content was previously true and is no longer. Content that does not describe current intent does not belong in the spec body. Historical detail is captured by version control (Git commit messages, diffs) and is recovered from there when needed.
 
-This is a principle, not a rule of housekeeping. Downstream consumers of the spec — other Claude chat sessions, the implementing CLI, future readers including future-self — derive current state by reading the body and searching it for relevant content. Every sentence in the body that does not describe current intent is a sentence that can be hit by a keyword search and lead the consumer to confusion. Closed Open Items with their original bodies still present are the most common offender; stale prose in section bodies is another; old terminology that the spec has since revised away is a third. The principle directs all of them: out of the body, into the log (or out entirely, with a Revision Log entry recording the removal).
+This is a principle, not a rule of housekeeping. Downstream consumers of the spec — other Claude chat sessions, the implementing CLI, future readers including future-self — derive current state by reading the body and searching it for relevant content. Every sentence in the body that does not describe current intent is a sentence that can be hit by a keyword search and lead the consumer to confusion. Closed Open Items with their original bodies still present are the most common offender; stale prose in section bodies is another; old terminology that the spec has since revised away is a third. The principle directs all of them: out of the body, into Git history (or out entirely, with a Git commit recording the removal).
 
 The principle has several concrete consequences elsewhere in the methodology and template:
 
 - **Tombstoning** (see §8). Items at terminal disposition carry only their identifier and disposition tag; bodies collapse to at most a one-sentence pointer.
-- **The maintenance sweep** (see §6). The periodic activity that operationalizes this principle — going through the spec and bringing it back into forward-looking shape when drift has accumulated.
-- **The implementation guide convention** (see `IMPLEMENTATION_GUIDE_TEMPLATE.md`). Guides apply the same principle more strictly, with no revision log in their body at all, because consumer tolerance for sediment is lower than the design partnership's.
+- **No revision log in the spec body.** The spec carries no in-document revision log. Git is the history; the spec is the current state. (Templates and the methodology itself carry their own revision logs — they are meta-documents whose audience benefits from history. Specs and implementation guides do not.)
+- **The implementation guide convention** (see `IMPLEMENTATION_GUIDE_TEMPLATE.md`). Guides apply the same principle with the same strictness — no revision log in their body, no historical content, no design rationale (which lives in the spec).
 
-A useful test when deciding whether content earns its place in the body: *will a reader six months from now, searching this document for "how does X work today," benefit from this sentence?* If yes, it earns its place. If the sentence describes how X used to work, or why we don't do X anymore, the answer is no — and the sentence belongs in the Revision Log entry that effected the change, not in the body.
+A useful test when deciding whether content earns its place in the body: *will a reader six months from now, searching this document for "how does X work today," benefit from this sentence?* If yes, it earns its place. If the sentence describes how X used to work, or why we don't do X anymore, the answer is no — and the sentence belongs in the Git commit that effected the change, not in the body.
 
-The principle applies to specs first and most directly. It applies to implementation guides with even more force, because guides are pure consumer references and have no equivalent of the spec's "history is preserved in the log" affordance. It applies less to working documents like the methodology and templates, which legitimately carry their own evolution history because their audience benefits from it.
+The principle applies to specs first and most directly. It applies to implementation guides with equal force. It applies less to working documents like the methodology and templates, which legitimately carry their own evolution history because their audience (designers, migration authors) benefits from it.
 
 ---
 

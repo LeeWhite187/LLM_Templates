@@ -25,7 +25,7 @@ Initial published version. Established the shape of implementation guides as for
 
 The conventions below apply to all guides authored under this template. They are guidance for the author, not content that guides reference back to (guides do not carry a `Template Revision` field). When in doubt about whether content earns its place in a guide, apply these conventions.
 
-**Forward-looking reference, not a history book.** The guide describes the library as currently designed. It does not describe how the library evolved, what alternatives were considered, or what was previously true and is no longer. Historical context lives in the spec and its revision log; the guide stays clean for consumer search and scan.
+**Forward-looking reference, not a history book.** The guide describes the library as currently designed. It does not describe how the library evolved, what alternatives were considered, or what was previously true and is no longer. Historical context lives in Git (commit messages and diffs) for both the guide and the spec; neither document carries its own in-document revision log.
 
 **Audience is the consumer, not the designer.** Every sentence should serve a consumer's success with the library. If a sentence answers a question the consumer would not ask ("why was it designed this way?"), it does not belong in the guide. It belongs in the spec.
 
@@ -37,7 +37,7 @@ The conventions below apply to all guides authored under this template. They are
 
 **Brief design-decision callouts are acceptable.** When a piece of operational guidance is non-obvious and a single sentence of "why" helps the consumer remember it, include the sentence. The boundary: a sentence is acceptable; a paragraph belongs in the spec.
 
-**No revision log in the guide body.** The guide does not carry its own revision log. The Spec field anchors the guide to a specific design version; git history captures everything else. A revision log in a consumer reference creates keyword sediment that confuses agent consumers doing keyword search and serves no current-use purpose.
+**No revision log in the guide body.** The guide does not carry its own revision log. The Spec field anchors the guide to a specific design version of the library; git history captures everything else. Under the methodology's forward-looking-reference principle, neither specs nor guides carry in-document revision logs — both rely on Git for history. The guide is held to this rule with the same strictness as the spec.
 
 **Section numbering is stable.** Sections are not renumbered across guide revisions. If a section becomes irrelevant, it is removed and the surrounding sections retain their numbers — leaving a gap in the sequence is acceptable. Consumers may cite section numbers; renumbering breaks those citations.
 

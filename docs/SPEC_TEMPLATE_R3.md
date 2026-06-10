@@ -41,17 +41,21 @@ New convention added: intra-log cross-references between revision log entries us
 
 **Date:** 2026-06-04T00:00:00Z
 
-Adopted the forward-looking-reference principle as the dominant design discipline for spec content (see `METHODOLOGY.md` §9). Specs describe the system as currently designed; content that does not describe current intent belongs in the Revision Log, not in the body. This principle drives the following template changes.
+Two substantive changes folded into a single R3 publication.
 
-Universal terminal disposition (tombstoning) introduced. Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state (Withdrawn, Superseded, Closed, Cancelled) is tombstoned in place: the identifier remains as a stable address, the title carries the disposition tag, and the body collapses to either nothing or a single sentence pointing to where the resolution lives. The previous convention preserved item bodies after withdrawal/closure with a "brief note"; that loophole permitted keyword sediment to accumulate in the spec, polluting search by downstream consumers. The new convention closes the loophole. Full rationale for closures lives in the Revision Log entry that effected the change, not in the tombstone.
+**Universal terminal-item tombstoning, in service of the forward-looking-reference principle.** Adopted the principle (see `METHODOLOGY.md` §9) as the dominant design discipline for spec content: specs describe the system as currently designed; content that does not describe current intent does not belong in the spec body. The principle drives the universal tombstoning rule that follows.
 
-The Open Item disposition convention was split into two: "Open Item active dispositions" (the urgency flags for items still being worked) and "Terminal item disposition" (the universal tombstoning rule that applies across all item types). The active and terminal cases are conceptually different and now carry separate rules.
+Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state (Withdrawn, Superseded, Closed, Cancelled) is tombstoned in place: the identifier remains as a stable address, the title carries the disposition tag, and the body collapses to either nothing or a single sentence pointing to where the resolution lives. The previous convention preserved item bodies after withdrawal/closure with a "brief note"; that loophole permitted keyword sediment to accumulate in the spec, polluting search by downstream consumers. The new convention closes the loophole.
 
-§13 (Open Items) in the spec template content updated to describe both active OI format and the tombstone format for terminal OIs.
+The Open Item disposition convention was split into "Open Item active dispositions" (the urgency flags for items still being worked) and "Terminal item disposition" (the universal tombstoning rule that applies across all item types). §13 (Open Items) in the spec template content updated accordingly.
 
-Forward-looking reference added as an explicit convention in the Conventions section, cross-referencing the methodology principle.
+**Removal of the per-spec revision log.** The §14 Revision Log section was removed from the spec template content. Specs no longer carry an in-document log. Rationale: the keyword sediment accumulating in revision log entries undermines the forward-looking-reference property; Git is the appropriate durable history for "what changed and why" (commit messages and diffs); the in-document log has no readers in the workflow that justify the noise. The Revision number in the title block persists — it identifies a stable state of the document for cross-document references.
 
-Related Documents updated to include `IMPLEMENTATION_GUIDE_TEMPLATE.md` — the new sibling template for downstream consumer guides, which applies the forward-looking principle more strictly (no revision log in guide body at all).
+The Revision-bump trigger was redefined: revision bumps signal publication moments (handoff to CLI, share with another Claude session, shelving for future resumption), not continuous design edits. Revision consistency and intra-log cross-reference conventions removed (both governed a log that no longer exists). The `Revision` title block field description updated.
+
+Exception: this template document retains its own Template Revision Log because templates are meta-documents read by designers and migration authors, not by library consumers; the consumer-pollution concern does not apply.
+
+**Other R3 changes.** `IMPLEMENTATION_GUIDE_TEMPLATE.md` published as a sibling document for downstream library consumers. The `Related Documents` field above now includes it.
 
 ---
 
@@ -85,7 +89,7 @@ If a project's item count for a given type approaches 99, that is treated as a s
 
 For Open Items that have reached the end of their useful life, see "Terminal item disposition" below.
 
-**Terminal item disposition (tombstoning).** Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state is tombstoned in place: it keeps its identifier (which is a stable address) and carries a terminal disposition tag in its title. The body collapses to either nothing or a single sentence pointing to where the resolution lives. Full rationale for the disposition belongs in the Revision Log entry that effected the change, not in the tombstone's body.
+**Terminal item disposition (tombstoning).** Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state is tombstoned in place: it keeps its identifier (which is a stable address) and carries a terminal disposition tag in its title. The body collapses to either nothing or a single sentence pointing to where the resolution lives. Full rationale for the disposition lives in the Git commit message that effected the change, not in the tombstone's body.
 
 Terminal dispositions:
 
@@ -128,11 +132,9 @@ The goal is that a reader (human or CLI) can confirm, section by section, that e
 
 SHALL is the default and the strong preference for all requirement statements. A well-formed requirement does not hedge — if a behavior is conditional, the condition belongs inside the SHALL: "When X occurs, the system shall Y" rather than "The system should Y." SHOULD and MAY are available if a requirement genuinely cannot be expressed in conditional SHALL form, but the author should attempt the rewrite first.
 
-**Revision consistency.** The `Revision` field in a spec's title block must match the highest-numbered entry in its Revision Log (§14). Any spec edit that bumps the revision number shall also produce a corresponding Revision Log entry, and vice versa. The two values are kept in lockstep.
+**Revision bumps signal publication.** The spec's `Revision` field bumps when the spec crosses a publishing boundary — handed to the implementing CLI, shared with another Claude session, or shelved at a stable state for future resumption. Continuous edits during ongoing design work do not bump the revision. The Revision exists to let other documents reference a specific stable state of this spec; it has no audience during continuous design.
 
-**Intra-log cross-references.** Cross-references between entries in a spec's Revision Log use the stable `Revision NN` identifier — never positional words ("above", "below", "previous", "earlier") and never bare timestamps. The integer revision number is the durable address of an entry; positional and temporal references are fragile under reordering or reformatting.
-
-**Forward-looking reference, not a history book.** The spec body describes the system as currently designed. Content that does not describe current intent — old item bodies that have been resolved, stale prose, obsolete terminology — belongs in the Revision Log, not in the body. See `METHODOLOGY.md` §9 for the principle in full. The tombstoning rule and the maintenance sweep activity (`METHODOLOGY.md` §6) both serve this principle.
+**Forward-looking reference, not a history book.** The spec body describes the system as currently designed. Content that does not describe current intent — old item bodies, stale prose, obsolete terminology, evolution narratives — does not belong in the spec body. Historical detail is captured by version control (Git commit messages, diffs) and is recovered from there when needed. See `METHODOLOGY.md` §9 for the principle in full. The tombstoning rule serves this principle directly; the spec carries no revision log because the keyword sediment a log accumulates undermines the forward-looking property.
 
 ---
 
@@ -143,7 +145,7 @@ To author a new spec under Template Revision 2:
 1. Copy the content between the `BEGIN SPEC TEMPLATE CONTENT` and `END SPEC TEMPLATE CONTENT` markers below into a new file.
 2. Fill in the title block fields. Set `Template Revision: 2` to indicate this spec adheres to Revision 2 of this template.
 3. Author the spec per its sections. Refer to the Conventions section above for rules.
-4. Maintain the spec's Revision Log per conventions: append-order, integer revision numbers, lockstep with the title block's `Revision` field.
+4. Maintain the spec's `Revision` field per conventions: bump it at publication moments (handoff to CLI, share with another Claude session, shelving for future resumption). Continuous design edits do not bump the revision.
 
 To migrate an existing spec from an earlier template revision to Revision 2, use the spec retrofit instruction (`SPEC_RETROFIT_INSTRUCTION.md`).
 
@@ -156,7 +158,7 @@ To migrate an existing spec from an earlier template revision to Revision 2, use
 **Project:** [Project name]
 **Short description:** [One sentence. What this system is, in plain language.]
 **Status:** [Draft | In Design | Pre-Implementation | Implementing | Stable | Superseded]
-**Revision:** [Integer. The initial published version is `1`. Each subsequent published change increments by one. Must match the highest-numbered entry in the Revision Log.]
+**Revision:** [Integer. The initial published version is `1`. Each subsequent published change increments by one. A "publication" is any moment the spec crosses out of the design conversation — handed to the implementing CLI, shared with another Claude session, or shelved at a stable state for future resumption. Continuous edits during ongoing design work do not bump the revision.]
 **Template Revision:** [Integer. Identifies which revision of `SPEC_TEMPLATE.md` this spec adheres to. See the Conventions section of the referenced template for the rules this spec follows.]
 **Created:** [ISO-8601 datetime, e.g., 2026-05-06T14:30:00Z]
 **Related Documents:** [Other specs this document references or is referenced by, with relative paths. Omit the field if none.]
@@ -178,7 +180,6 @@ To migrate an existing spec from an earlier template revision to Revision 2, use
 11. [Infrastructure](#11-infrastructure)
 12. [Key Decisions](#12-key-decisions)
 13. [Open Items](#13-open-items)
-14. [Revision Log](#14-revision-log)
 
 ---
 
@@ -233,7 +234,7 @@ If no project-specific vocabulary needs definition, leave the heading in place w
 
 ### 1.9 Spec Conventions
 
-This spec adheres to the conventions defined in `SPEC_TEMPLATE.md` at the revision identified by the `Template Revision` field in this spec's title block. See the Conventions section of that document for identifier rules, number stability, terminal item disposition (tombstoning), requirement language, table usage, revision consistency, intra-log cross-references, the forward-looking-reference principle, and other conventions governing this spec.
+This spec adheres to the conventions defined in `SPEC_TEMPLATE.md` at the revision identified by the `Template Revision` field in this spec's title block. See the Conventions section of that document for identifier rules, number stability, terminal item disposition (tombstoning), requirement language, table usage, revision-bump triggers, the forward-looking-reference principle, and other conventions governing this spec.
 
 The conventions are not duplicated here. The template is the single source of truth for the rules a spec follows; this spec references the template revision it was authored under, and migrations to newer template revisions are deliberate (see `SPEC_RETROFIT_INSTRUCTION.md`).
 
@@ -563,7 +564,7 @@ Format (full form):
 
 The four-part form is the full structure and is preferred when alternatives and consequences are substantive. For decisions where alternatives and consequences are routine or self-evident, the entry may collapse to a shorter form (Decision + Rationale prose, with alternatives and consequences woven in or omitted). Choose the form that conveys the decision most faithfully to the reader — including the implementing CLI, which will treat this section as authoritative justification for design choices made elsewhere in the spec.
 
-KD entries are written when the decision is made, not retroactively. They are revised when the decision is revisited; the revision is noted in the Revision Log.]
+KD entries are written when the decision is made, not retroactively. They are revised when the decision is revisited; the Git commit captures what shifted.]
 
 ---
 
@@ -585,7 +586,7 @@ Active Open Item format:
 
 **Congruency-check Open Items.** A subset of Open Items is written specifically to direct the implementation agent to verify that built code matches a spec revision. These items are flagged in their narrative ("Confirm that [component X] reflects [decision Y] from §[Z]") and resolved when the implementation has been audited against the spec. They are not bugs — they are deliberate audit prompts planted in the spec to make spec-vs-code drift detectable. See the methodology document for the full pattern.
 
-**Terminal Open Items (tombstones).** When an Open Item reaches a terminal state — Closed or Cancelled — it tombstones in place per the universal terminal disposition rule (see Conventions in the template). The number remains as a stable address; the body collapses to either nothing or a single sentence pointing to the resolution. Full rationale for the closure lives in the Revision Log entry that effected it.
+**Terminal Open Items (tombstones).** When an Open Item reaches a terminal state — Closed or Cancelled — it tombstones in place per the universal terminal disposition rule (see Conventions in the template). The number remains as a stable address; the body collapses to either nothing or a single sentence pointing to the resolution. Full rationale for the closure lives in the Git commit message that effected it.
 
 Terminal format examples:
 
@@ -594,26 +595,6 @@ Terminal format examples:
 ### OI-18 — (Cancelled; scope removed from project)
 
 The forward-looking-reference principle (see Conventions and `METHODOLOGY.md` §9) applies most visibly here. An Open Item with its original body preserved after closure pollutes the spec for downstream consumers doing keyword search. Tombstoning eliminates that pollution while preserving the number as a durable address.]
-
----
-
-## 14. Revision Log
-
-[A chronological list of substantive changes to the spec, in append order — oldest entry first, most recent entry last. Each entry is identified by an integer revision number. The initial published version of the spec is Revision 1; each subsequent published change increments the revision by one.
-
-The highest-numbered entry's revision number shall match the `Revision` field in the title block. Any spec edit that bumps the revision shall produce a corresponding entry here, and vice versa. The two are kept in lockstep.
-
-Each entry carries an ISO-8601 timestamp as a field within the entry, so the temporal history of the spec is preserved without echoing the timestamp into the title block. A reader who wants the date of the most recent revision finds it at the bottom of this section.
-
-Format:
-
-### Revision NN
-
-**Date:** YYYY-MM-DDTHH:MM:SSZ
-
-[Narrative description of the changes in this revision. Reference items by their identifier when relevant. Note when items are added, withdrawn, or substantially reworded. Note when sections are added or substantially restructured. Note when KDs are added or revisited and when OIs are opened, flagged, or closed.
-
-Trivial edits (typo fixes, formatting cleanups) do not earn revision log entries — they happen silently and do not bump the revision number.]
 
 ---
 
