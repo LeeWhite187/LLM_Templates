@@ -156,7 +156,23 @@ Items in the spec (UR, FR, NFR, KD, OI) are identified with a type prefix and a 
 
 **Numbers are addresses.** When the spec says "as required by FR-12," that reference must continue to point at the same requirement across all revisions of the spec. Renumbering would invalidate every reference to the renumbered item — including references in code comments, commit messages, ticket trackers, and external documents. Therefore: numbers are stable, never reused, never reassigned.
 
-**Terminal items remain in place as tombstones.** An item that reaches a terminal disposition — withdrawn, superseded, closed, cancelled — is not deleted from its section. It remains in place with its identifier and a disposition tag in the heading: `### FR-07 — (Withdrawn)`, `### KD-03 — (Superseded by KD-09)`, `### OI-12 — (Closed; resolved by §6.4)`. The body of a tombstoned item is empty or carries at most a one-sentence pointer to where the resolution lives. Full rationale for the disposition lives in the Git commit message that effected the change, not in the tombstone's body. This rule applies universally across item types (UR, FR, NFR, KD, OI); the same discipline keeps the spec scannable for current state regardless of which item type was retired.
+**Terminal items remain in place as tombstones.** An item that reaches a terminal disposition — withdrawn, superseded, closed, cancelled — is not deleted from its section. It remains in place with its identifier and a disposition tag in the heading, and nothing else. The tombstone has no body.
+
+The disposition tag is a single word from the closed set (Withdrawn, Superseded, Closed, Cancelled), optionally followed by `by <identifier-or-section>` where the qualifier names the superseding or resolving artifact:
+
+- `### FR-07 — (Withdrawn)`
+- `### FR-12 — (Superseded by FR-15)`
+- `### KD-03 — (Superseded by KD-09)`
+- `### OI-12 — (Closed)`
+- `### OI-04 — (Closed by KD-09)`
+- `### OI-22 — (Closed by §6.4)`
+- `### OI-18 — (Cancelled)`
+
+The qualifier must be an identifier (`FR-NN`, `KD-NN`, `OI-NN`, `UR-NN`, `NFR-NN`) or a section reference (`§X.Y`) — never prose. Identifier and section references are doc machinery, not design content; they already exist legitimately elsewhere in the spec, and their presence in a tombstone heading adds no new searchable content that could mislead a consumer scanning for design-relevant material. A search for `FR-15` was always going to surface the live FR-15 entry; surfacing it once more in the `FR-12 — (Superseded by FR-15)` tombstone changes nothing about the consumer's correct interpretation.
+
+Prose qualifiers are disallowed. Examples of disallowed tombstone forms: `(Closed; resolved by §6.4 final schema)`, `(Cancelled; scope removed from project)`, `(Superseded by FR-15; the old approach was inadequate)`. Each adds prose that introduces design-content phrases the spec body should not carry. Rationale, supersession reasoning, and historical context all belong in the Git commit message that effected the change.
+
+This rule applies universally across item types (UR, FR, NFR, KD, OI). When a KD supersedes another KD, the new KD's body does not recount the superseded predecessor or explain why the supersession was needed. The new KD describes the current decision and its rationale on its own terms. The supersession relationship is captured by the superseded KD's tombstone (e.g., `### KD-03 — (Superseded by KD-09)`) and by Git history; the new KD's body stays free of historical context. The same discipline applies whenever any item supersedes another.
 
 **New items always take the next number.** New items take `max(existing_number) + 1` for their type, where the maximum includes all tombstoned entries. This rule is mechanical — the implementing CLI can rely on it when generating new identifiers.
 
@@ -172,7 +188,7 @@ This is a principle, not a rule of housekeeping. Downstream consumers of the spe
 
 The principle has several concrete consequences elsewhere in the methodology and template:
 
-- **Tombstoning** (see §8). Items at terminal disposition carry only their identifier and disposition tag; bodies collapse to at most a one-sentence pointer.
+- **Tombstoning** (see §8). Items at terminal disposition carry only their identifier and a single-word disposition tag in the heading, optionally followed by `by <identifier-or-section>`. The body is empty. Prose qualifiers are disallowed; only identifier and section references are permitted in the disposition tag because they are doc machinery, not design content.
 - **No revision log in the spec body.** The spec carries no in-document revision log. Git is the history; the spec is the current state. (Templates and the methodology itself carry their own revision logs — they are meta-documents whose audience benefits from history. Specs and implementation guides do not.)
 - **The implementation guide convention** (see `IMPLEMENTATION_GUIDE_TEMPLATE.md`). Guides apply the same principle with the same strictness — no revision log in their body, no historical content, no design rationale (which lives in the spec).
 

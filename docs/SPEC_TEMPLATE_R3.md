@@ -45,7 +45,11 @@ Two substantive changes folded into a single R3 publication.
 
 **Universal terminal-item tombstoning, in service of the forward-looking-reference principle.** Adopted the principle (see `METHODOLOGY.md` §9) as the dominant design discipline for spec content: specs describe the system as currently designed; content that does not describe current intent does not belong in the spec body. The principle drives the universal tombstoning rule that follows.
 
-Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state (Withdrawn, Superseded, Closed, Cancelled) is tombstoned in place: the identifier remains as a stable address, the title carries the disposition tag, and the body collapses to either nothing or a single sentence pointing to where the resolution lives. The previous convention preserved item bodies after withdrawal/closure with a "brief note"; that loophole permitted keyword sediment to accumulate in the spec, polluting search by downstream consumers. The new convention closes the loophole.
+Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state (Withdrawn, Superseded, Closed, Cancelled) is tombstoned in place: the identifier remains as a stable address, the title carries a single-word disposition tag optionally followed by `by <identifier-or-section>`, and the body is empty. The previous convention preserved item bodies after withdrawal/closure with a "brief note" or allowed a "one-sentence pointer"; both loopholes permitted keyword sediment to accumulate in the spec, polluting search by downstream consumers. The new rule (bare body, identifier-only qualifiers) closes those loopholes while still permitting tombstones to point at superseding artifacts via their stable identifiers — which are doc machinery rather than design content and therefore do not mislead keyword search.
+
+Supersession relationships are captured by the superseded item's tombstone (e.g., `### KD-03 — (Superseded by KD-09)`) and by Git history. The superseding item's body describes the current decision on its own terms; it does not recount the predecessor or explain the supersession. When a KD supersedes another KD, this is explicit: the new KD's body stays free of historical context.
+
+Prose qualifiers in tombstones are disallowed — forms like `(Cancelled; scope removed from project)` or `(Closed; resolved by §6.4 final schema)` introduce design-content phrases that the spec body should not carry. Rationale, supersession reasoning, and any other historical context live in the Git commit message that effected the change.
 
 The Open Item disposition convention was split into "Open Item active dispositions" (the urgency flags for items still being worked) and "Terminal item disposition" (the universal tombstoning rule that applies across all item types). §13 (Open Items) in the spec template content updated accordingly.
 
@@ -89,30 +93,38 @@ If a project's item count for a given type approaches 99, that is treated as a s
 
 For Open Items that have reached the end of their useful life, see "Terminal item disposition" below.
 
-**Terminal item disposition (tombstoning).** Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state is tombstoned in place: it keeps its identifier (which is a stable address) and carries a terminal disposition tag in its title. The body collapses to either nothing or a single sentence pointing to where the resolution lives. Full rationale for the disposition lives in the Git commit message that effected the change, not in the tombstone's body.
+**Terminal item disposition (tombstoning).** Any item — UR, FR, NFR, KD, or OI — that has reached a terminal state is tombstoned in place: it keeps its identifier (which is a stable address) and carries a disposition tag in its title. The tombstone has no body.
 
-Terminal dispositions:
+The disposition tag is a single word from the closed set below, optionally followed by `by <identifier-or-section>`:
 
-- **Withdrawn** — the item was created but the design decision was made not to include it; never implemented. Used when an FR or KD was proposed and then declined.
-- **Superseded** — replaced by another item; the new item carries the current design intent. Used when a KD is reopened and a new KD takes its place, or when an FR is restructured into one or more newer FRs.
-- **Closed** — work is done; the resolution lives elsewhere. Used primarily for OIs whose questions have been answered.
-- **Cancelled** — abandoned without resolution. Used for OIs that became irrelevant before being resolved.
+- **Withdrawn** — the item was created but the design decision was made not to include it; never implemented.
+- **Superseded** — replaced by another item; the new item carries the current design intent.
+- **Closed** — work is done; the resolution lives in the current state of the spec (used primarily for OIs whose questions have been answered).
+- **Cancelled** — abandoned without resolution (used for OIs that became irrelevant before being resolved).
 
 Tombstone format examples:
 
 ```
 ### FR-07 — (Withdrawn)
 
-### FR-07 — (Superseded by FR-15)
+### FR-12 — (Superseded by FR-15)
 
 ### KD-03 — (Superseded by KD-09)
 
-### OI-12 — (Closed; resolved by §6.4)
+### OI-12 — (Closed)
 
-### OI-18 — (Cancelled; scope removed from project)
+### OI-04 — (Closed by KD-09)
+
+### OI-22 — (Closed by §6.4)
+
+### OI-18 — (Cancelled)
 ```
 
-The body is empty or carries at most one sentence naming the artifact that holds the resolution. The rule applies universally across item types because the same discipline — keeping the spec scannable for current state — applies regardless of which item type was retired.
+The body is empty. The `by <identifier-or-section>` qualifier, when present, must be an item identifier (`FR-NN`, `KD-NN`, `OI-NN`, `UR-NN`, `NFR-NN`) or a section reference (`§X.Y`) — never prose. Identifier and section references are doc machinery, not design content; they already exist legitimately elsewhere in the spec, so their presence in a tombstone heading adds no new searchable content that could mislead a consumer.
+
+Prose qualifiers are disallowed. Forms like `(Closed; resolved by §6.4 final schema)`, `(Cancelled; scope removed from project)`, or `(Superseded by FR-15; old approach was inadequate)` introduce design-content phrases that pollute keyword search. Rationale and historical context for any disposition live in the Git commit message that effected the change.
+
+The rule applies universally across item types. When a KD supersedes another KD, the new KD's body does not recount the superseded predecessor or explain the supersession. The new KD describes the current decision on its own terms; the supersession is captured by the old KD's tombstone and by Git history.
 
 **The template is a superset.** This template lists all sections a spec may have. Any individual spec is expected to use a subset of these sections. Sections that do not apply to a given project are not deleted — they remain in place with a brief design statement explaining *why* the section was considered and found inapplicable. A bare "not applicable" is insufficient; the explanation is itself a small piece of design reasoning that confirms the consideration happened.
 
@@ -564,7 +576,9 @@ Format (full form):
 
 The four-part form is the full structure and is preferred when alternatives and consequences are substantive. For decisions where alternatives and consequences are routine or self-evident, the entry may collapse to a shorter form (Decision + Rationale prose, with alternatives and consequences woven in or omitted). Choose the form that conveys the decision most faithfully to the reader — including the implementing CLI, which will treat this section as authoritative justification for design choices made elsewhere in the spec.
 
-KD entries are written when the decision is made, not retroactively. They are revised when the decision is revisited; the Git commit captures what shifted.]
+KD entries are written when the decision is made, not retroactively. They are revised when the decision is revisited; the Git commit captures what shifted.
+
+**When a KD supersedes another KD.** The new KD describes the current decision on its own terms — it does not recount the superseded predecessor, explain why the supersession was needed, or carry historical context about what changed. The "Alternatives considered" subsection is for alternatives weighed *in parallel with* the current decision, not for documenting prior decisions that were replaced. The supersession relationship is captured entirely by the superseded KD's tombstone (e.g., `### KD-03 — (Superseded by KD-09)`) and by Git history. The new KD's body stays free of historical reference.]
 
 ---
 
@@ -586,15 +600,21 @@ Active Open Item format:
 
 **Congruency-check Open Items.** A subset of Open Items is written specifically to direct the implementation agent to verify that built code matches a spec revision. These items are flagged in their narrative ("Confirm that [component X] reflects [decision Y] from §[Z]") and resolved when the implementation has been audited against the spec. They are not bugs — they are deliberate audit prompts planted in the spec to make spec-vs-code drift detectable. See the methodology document for the full pattern.
 
-**Terminal Open Items (tombstones).** When an Open Item reaches a terminal state — Closed or Cancelled — it tombstones in place per the universal terminal disposition rule (see Conventions in the template). The number remains as a stable address; the body collapses to either nothing or a single sentence pointing to the resolution. Full rationale for the closure lives in the Git commit message that effected it.
+**Terminal Open Items (tombstones).** When an Open Item reaches a terminal state — Closed or Cancelled — it tombstones in place per the universal terminal disposition rule (see Conventions in the template). The number remains as a stable address; the tombstone has no body. The disposition tag in the heading is the single word `(Closed)` or `(Cancelled)`, optionally followed by `by <identifier-or-section>` when a specific superseding artifact is worth naming.
 
 Terminal format examples:
 
-### OI-12 — (Closed; resolved by §6.4)
+### OI-12 — (Closed)
 
-### OI-18 — (Cancelled; scope removed from project)
+### OI-04 — (Closed by KD-09)
 
-The forward-looking-reference principle (see Conventions and `METHODOLOGY.md` §9) applies most visibly here. An Open Item with its original body preserved after closure pollutes the spec for downstream consumers doing keyword search. Tombstoning eliminates that pollution while preserving the number as a durable address.]
+### OI-22 — (Closed by §6.4)
+
+### OI-18 — (Cancelled)
+
+The qualifier, when present, must be an identifier or section reference — never prose. Identifier references are doc machinery, not design content, and add no misleading sediment to keyword search. Prose explanations (rationale, historical context, descriptions of resolution) live in Git commit messages.
+
+The forward-looking-reference principle (see Conventions and `METHODOLOGY.md` §9) applies most visibly here. An Open Item with its original body preserved after closure pollutes the spec for downstream consumers doing keyword search. The bare-body tombstone eliminates that pollution while preserving the number as a durable address and optionally pointing — via identifier alone — to where the resolution lives.]
 
 ---
 

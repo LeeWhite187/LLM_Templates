@@ -4,7 +4,7 @@
 
 Migrate an existing project specification document from Template Revision 2 conventions to Template Revision 3 conventions. The substantive changes from R2 to R3 are:
 
-- **Universal terminal-item tombstoning** in service of the forward-looking-reference principle. Any item (UR, FR, NFR, KD, OI) at a terminal disposition (Withdrawn, Superseded, Closed, Cancelled) collapses its body to either nothing or a single sentence pointing to the resolution.
+- **Universal terminal-item tombstoning** in service of the forward-looking-reference principle. Any item (UR, FR, NFR, KD, OI) at a terminal disposition (Withdrawn, Superseded, Closed, Cancelled) carries only its identifier and a disposition tag in the heading. The tombstone body is empty. The disposition tag may optionally include `by <identifier-or-section>` to name a superseding or resolving artifact, but no prose qualifiers are permitted.
 - **Removal of the per-spec revision log.** The §14 Revision Log section is removed from the spec entirely. The spec's `Revision` field in the title block persists for cross-document references; the in-document log is gone. Git is the history.
 - **Publication-event revision bumping.** Revision bumps signal publication moments — handoff to CLI, share with another Claude session, shelving for future resumption — not continuous design edits.
 
@@ -59,20 +59,20 @@ The historical content that was in §14 is preserved in Git via the commit that 
 
 ### B.1 Tombstone candidates among existing items
 
-R3 introduces universal terminal-item tombstoning: items at terminal disposition (Withdrawn, Superseded, Closed, Cancelled) collapse their bodies to either nothing or a single sentence pointing to the resolution. The operator decides which items are actually terminal — this migration does not apply tombstoning, but it surfaces candidates so the operator can plan the sweep.
+R3 introduces universal terminal-item tombstoning: items at terminal disposition (Withdrawn, Superseded, Closed, Cancelled) carry only their identifier and a disposition tag in the heading. The tombstone body is empty. The disposition tag may optionally include `by <identifier-or-section>` to name a superseding or resolving artifact, but no prose qualifiers are permitted. The operator decides which items are actually terminal — this migration does not apply tombstoning, but it surfaces candidates so the operator can plan the sweep.
 
 Scan all items in the spec (UR, FR, NFR, KD in their respective sections, OI in §13) and identify candidates that appear to be terminal but have not yet been tombstoned. Indicators include:
 
-- The item's title contains `(withdrawn)`, `(closed)`, `(deferred)`, `(superseded)`, `(resolved)`, or similar parenthetical markers — but the body still carries substantive content beyond a single pointer sentence.
-- The item's body contains closure language ("resolved by §X", "closed: ...", "deferred to v2", "see KD-NN", "no longer applicable", etc.) but the body is longer than one or two sentences.
+- The item's title contains `(withdrawn)`, `(closed)`, `(deferred)`, `(superseded)`, `(resolved)`, or similar parenthetical markers — but the body still carries content.
+- The item's body contains closure language ("resolved by §X", "closed: ...", "deferred to v2", "see KD-NN", "no longer applicable", etc.).
 - The item appears to describe a question, decision, or requirement that has been visibly resolved elsewhere in the spec.
 
 For each candidate, report:
 - The item's identifier (e.g., FR-07, OI-12, KD-03).
 - The current title of the item.
-- A brief excerpt or summary of the body content.
+- A brief excerpt or summary of the body content (so the operator has context for the decision).
 - A suggested terminal disposition (Withdrawn / Superseded / Closed / Cancelled), based on the indicators present.
-- A suggested pointer for the tombstone body, if one is evident from the existing body content.
+- A suggested identifier or section qualifier (`by FR-NN`, `by KD-NN`, `by §X.Y`) if the body content clearly names a superseding artifact or section that holds the resolution. Suggest only identifier or section references — never prose. If no identifier/section is evident from the body, suggest the bare disposition (e.g., just `(Closed)`).
 
 The operator reviews this list and applies tombstoning to confirmed terminal items in a follow-up sweep. The operator may also identify additional terminal items the detection missed and may reject candidates that are not actually terminal.
 
