@@ -1,0 +1,23 @@
+<Project Sdk="WixToolset.Sdk/7.0.0">
+
+  <!-- The WiX MSI (FR-70, KD-20). Built from the staged release layout produced by
+       deploy/build-release.ps1; pass -p:StagingDir and -p:ProductVersion. -->
+
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <ProductVersion Condition=" '$(ProductVersion)' == '' ">1.0.0</ProductVersion>
+    <StagingDir Condition=" '$(StagingDir)' == '' ">$(MSBuildThisFileDirectory)..\staging</StagingDir>
+    <CAFile Condition=" '$(CAFile)' == '' ">$(MSBuildThisFileDirectory)..\installer-actions\bin\x64\Release\net472\Dashboards.InstallerActions.CA.dll</CAFile>
+    <DefineConstants>ProductVersion=$(ProductVersion);StagingDir=$(StagingDir);CAFile=$(CAFile)</DefineConstants>
+    <SuppressSpecificWarnings>1118</SuppressSpecificWarnings>
+    <OutputName>FacilityDashboards-$(ProductVersion)</OutputName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.Util.wixext" Version="7.0.0" />
+    <PackageReference Include="WixToolset.Firewall.wixext" Version="7.0.0" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>

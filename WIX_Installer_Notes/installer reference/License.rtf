@@ -1,0 +1,9 @@
+{\rtf1\ansi\deff0
+{\fonttbl{\f0 Segoe UI;}}
+\f0\fs20
+Facility Dashboard Platform\par
+\par
+Internal facility software. Installation registers the FacilityDashboards Windows service, provisions an inbound firewall rule for the configured listening port, and writes deploy-time configuration to the service folder.\par
+\par
+On a fresh database the installer creates the schema. On an existing database it never applies migrations automatically; use fd-dbtool after a backup, or pass APPLYMIGRATIONS=1 explicitly.\par
+}
