@@ -65,7 +65,7 @@ Exception: this template document retains its own Template Revision Log because 
 
 ## Conventions
 
-The conventions below apply to all specs authored under Template Revision 2. They are the authoritative source for the rules a spec follows. Specs do not embed these conventions; the `Template Revision` field in each spec's title block names which revision of this document applies.
+The conventions below apply to all specs authored under Template Revision 3. They are the authoritative source for the rules a spec follows. Specs do not embed these conventions; the `Template Revision` field in each spec's title block names which revision of this document applies.
 
 **Item identifiers.** Items in a spec are identified by a type prefix and a two-digit zero-padded sequence number:
 
@@ -152,14 +152,14 @@ SHALL is the default and the strong preference for all requirement statements. A
 
 ## Using This Template
 
-To author a new spec under Template Revision 2:
+To author a new spec under Template Revision 3:
 
 1. Copy the content between the `BEGIN SPEC TEMPLATE CONTENT` and `END SPEC TEMPLATE CONTENT` markers below into a new file.
-2. Fill in the title block fields. Set `Template Revision: 2` to indicate this spec adheres to Revision 2 of this template.
+2. Fill in the title block fields. Set `Template Revision: 3` to indicate this spec adheres to Revision 3 of this template.
 3. Author the spec per its sections. Refer to the Conventions section above for rules.
 4. Maintain the spec's `Revision` field per conventions: bump it at publication moments (handoff to CLI, share with another Claude session, shelving for future resumption). Continuous design edits do not bump the revision.
 
-To migrate an existing spec from an earlier template revision to Revision 2, use the spec retrofit instruction (`SPEC_RETROFIT_INSTRUCTION.md`).
+To migrate an existing spec from an earlier template revision to Revision 3, use the spec retrofit instruction (`Spec_Migration_Instruction.md`).
 
 ---
 
