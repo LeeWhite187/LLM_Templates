@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Scheduled-task go-by (WiX 7 / MSI). Registers an installed binary to run daily as SYSTEM.
+
+  MSI has NO first-class scheduled-task element (unlike ServiceInstall), so we ship a Task
+  Scheduler XML definition (SurveyTask.sample.xml) and register it with schtasks.exe from
+  deferred custom actions.
+
+  Key lessons (see WIX_INSTALLER_LESSONS.md sections 3, 5, 10):
+   - Register the task AFTER RemoveExistingProducts. Under MajorUpgrade
+     Schedule="afterInstallExecute" the old product is removed LATE, so its own schtasks /delete
+     runs after the new install — if we created the task earlier the upgrade would silently lose
+     it. This is the exact hazard the service StartFdService action avoids.
+   - Deferred + Impersonate="no" so schtasks runs elevated in the install's system context.
+   - /f makes /create idempotent (repair / re-register overwrites cleanly).
+   - Pair the create with a rollback delete so a failed install can't orphan the task.
+   - Deleting a task that doesn't exist returns non-zero => Return="ignore" on the delete paths.
+
+  Requires the WiX Util extension for Wix4UtilCA_X64 / WixQuietExec (already referenced by the
+  main package). Replace PUT-STABLE-GUID-HERE with a hardcoded GUID and keep it stable across
+  versions (component reference counting depends on it — section 3).
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Fragment>
+
+    <!-- The Task Scheduler XML, installed next to the agent exe. A managed immediate CA
+         (WriteTaskXml, not shown) substitutes {{INSTALLFOLDER}} in the file before registration;
+         omit that action and ship the final XML if you install to a fixed path. -->
+    <Component Id="SurveyTaskXml" Directory="INSTALLFOLDER" Guid="PUT-STABLE-GUID-HERE">
+      <File Id="SurveyTaskXmlFile" Source="$(var.StagingDir)\SurveyTask.xml" KeyPath="yes" />
+    </Component>
+
+    <!-- Register (idempotent via /f). -->
+    <SetProperty Id="CreateSurveyTask" Sequence="execute" Before="CreateSurveyTask"
+                 Value="&quot;[System64Folder]schtasks.exe&quot; /create /tn &quot;\OGA\HostSurvey&quot; /xml &quot;[INSTALLFOLDER]SurveyTask.xml&quot; /f" />
+    <CustomAction Id="CreateSurveyTask" DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Impersonate="no" Return="check" />
+
+    <!-- Rollback: scheduled immediately BEFORE the create, so it only runs if the install later
+         fails and rolls back — undoing the registration. -->
+    <SetProperty Id="RollbackSurveyTask" Sequence="execute" Before="RollbackSurveyTask"
+                 Value="&quot;[System64Folder]schtasks.exe&quot; /delete /tn &quot;\OGA\HostSurvey&quot; /f" />
+    <CustomAction Id="RollbackSurveyTask" DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
+                  Execute="rollback" Impersonate="no" Return="ignore" />
+
+    <!-- Deregister on a real uninstall. -->
+    <SetProperty Id="DeleteSurveyTask" Sequence="execute" Before="DeleteSurveyTask"
+                 Value="&quot;[System64Folder]schtasks.exe&quot; /delete /tn &quot;\OGA\HostSurvey&quot; /f" />
+    <CustomAction Id="DeleteSurveyTask" DllEntry="WixQuietExec" BinaryRef="Wix4UtilCA_X64"
+                  Execute="deferred" Impersonate="no" Return="ignore" />
+
+    <InstallExecuteSequence>
+      <!-- Create after the old product is gone; rollback paired just before it. -->
+      <Custom Action="RollbackSurveyTask" After="RemoveExistingProducts" Condition="NOT REMOVE" />
+      <Custom Action="CreateSurveyTask" After="RollbackSurveyTask" Condition="NOT REMOVE" />
+      <!-- Delete only on a true full uninstall, never during a major-upgrade removal of the old
+           product (NOT UPGRADINGPRODUCTCODE), before the files are removed. -->
+      <Custom Action="DeleteSurveyTask" Before="RemoveFiles"
+              Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
+    </InstallExecuteSequence>
+
+  </Fragment>
+</Wix>

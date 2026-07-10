@@ -58,6 +58,13 @@ Property table. Both readable via the `WindowsInstaller.Installer` COM object.
 - **ProductCode regenerates per build** (no explicit `ProductId`). `msiexec /x <newer .msi file>`
   cannot uninstall an older build of the "same" version — uninstall by ProductCode from
   `HKLM\...\Uninstall\*` instead.
+- **Bump the payload's file version, not just the MSI `ProductVersion`.** MSI overwrites a file on
+  upgrade only when the incoming file's version is *higher*. If the exe's `FileVersion` is hardcoded
+  and unchanged, a major upgrade with a bumped `ProductVersion` installs the new package but silently
+  **keeps the old exe on disk** (same file version → no overwrite), so the fix never lands — the
+  symptom is "I upgraded but the bug is still there." Stamp `FileVersion` = `ProductVersion` at
+  publish (`dotnet publish -p:Version=x.y.z`). Hit for real: a task-XML fix didn't take across a
+  0.1.0→0.1.1 upgrade because both exes were version 0.1.0.0.
 
 ## 4. Preserving operator configuration across upgrades
 
@@ -149,3 +156,72 @@ files. In ASP.NET Core minimal hosting, **without an explicit `UseRouting()` cal
 at the very start of the pipeline**, a `MapFallback` catch-all matches every request, and
 `UseStaticFiles` deliberately skips endpoint-matched requests. Fix: register static files first,
 then call `UseRouting()` explicitly, then auth and `Map*`.
+
+## 10. Scheduled tasks (no first-class WiX element — the `schtasks` pattern)
+
+MSI has a `ServiceInstall` element but **nothing** for scheduled tasks. To register an installed
+binary to run on a schedule (e.g. a daily agent run as `SYSTEM`), ship a Task Scheduler **XML
+definition** and register it with `schtasks.exe` from deferred custom actions. Prefer XML over
+inline `schtasks` flags — only XML can express the two settings that matter for VMs that aren't
+always on: missed-run catch-up and a fleet-spreading random delay.
+
+Working examples: `installer reference/ScheduledTask.sample.wxs` (the WiX fragment) and
+`installer reference/SurveyTask.sample.xml` (the task definition).
+
+**The pattern**
+
+1. **Author the task as XML** (Task Scheduler 1.2 schema). The settings that earn their keep:
+   - `<Principal>` `<UserId>S-1-5-18</UserId>` + `LogonType=ServiceAccount` + `RunLevel=HighestAvailable`
+     → runs as `SYSTEM`, elevated, **no stored password**, and its network identity is the machine
+     account (which is what makes domain secure-channel / Kerberos checks possible).
+   - `<StartWhenAvailable>true` → catches runs **missed while the VM was powered off**. Without it a
+     VM that's down at the trigger time simply never reports that day.
+   - `<RandomDelay>PT1H` on the trigger → spreads a fleet so every host doesn't hit the listener in
+     the same second.
+   - `DisallowStartIfOnBatteries=false` + `StopIfGoingOnBatteries=false` (VMs can report as "on
+     battery"), `ExecutionTimeLimit`, `MultipleInstancesPolicy=IgnoreNew`.
+2. **Resolve the exe path.** The `<Command>` isn't known until `INSTALLFOLDER` is chosen, so ship the
+   XML with a token (`{{INSTALLFOLDER}}`) and have a managed immediate CA substitute it before
+   registration (same shape as the config-write action in §4). If you always install to a fixed
+   ProgramFiles path, hardcode `<Command>` and drop that action.
+3. **Register**, idempotently: deferred, `Impersonate="no"` (runs elevated in the install's system
+   context), `"[System64Folder]schtasks.exe" /create /tn "\OGA\HostSurvey" /xml "[INSTALLFOLDER]SurveyTask.xml" /f`.
+   `/f` overwrites on repair/re-register.
+4. **Deregister on uninstall:** `schtasks /delete /tn ... /f` with `Return="ignore"` (deleting a
+   missing task returns non-zero).
+5. **Rollback:** pair the create with an `Execute="rollback"` CA (also a `/delete`) sequenced
+   *immediately before* the create, so a later install failure doesn't orphan the task.
+
+**Sequencing — the same trap as services (§3).** Under `MajorUpgrade Schedule="afterInstallExecute"`,
+`RemoveExistingProducts` runs **late**, so the *old* product's `schtasks /delete` fires after the new
+install. Schedule the **create `After="RemoveExistingProducts"`** (with its rollback just before it),
+exactly like `StartFdService` — otherwise the old product's uninstall deletes the task the new
+install just created. Belt and suspenders: also guard the delete with `NOT UPGRADINGPRODUCTCODE` so a
+newer package's authoring skips the delete during an upgrade in the first place.
+
+**Gotchas**
+
+- **Quoting:** `/tn`, `/xml`, and `/tr` values with spaces need embedded quotes inside the
+  `WixQuietExec` command. Compose in a `SetProperty` and verify the formatted result in the verbose
+  log (`WixQuietExec:` lines) — this is the #1 source of silent `schtasks` failures.
+- **Deferred CAs can't read properties** — pass the composed command via the same-named property
+  (CustomActionData, §5).
+- `[System64Folder]schtasks.exe`: referencing it here keeps `System64Folder` in the Directory table
+  (see the §5 2727/`System64Folder` note).
+- **Elevation:** `RunLevel=HighestAvailable` (XML) or `/rl HIGHEST` (flags) — the task needs elevation
+  to read the registry/MSI/secure-channel data.
+- **The XML file must be UTF-16 *with a BOM*.** `schtasks /create /xml` reports *"The task XML is
+  malformed"* if the file is UTF-16 without a BOM (the bytes don't match the `encoding="UTF-16"`
+  declaration and it can't decode). Write it with the BOM — .NET `Encoding.Unicode` via
+  `File.WriteAllText` does. (Both symptoms were hit for real: no-BOM → "malformed".)
+- **Omit `<LogonType>` for a SYSTEM principal.** With `<UserId>S-1-5-18</UserId>`, including
+  `<LogonType>ServiceAccount</LogonType>` fails validation — *"a value which is incorrectly formatted
+  or out of range"* pointing at the LogonType line. Windows' own exported SYSTEM tasks omit it; just
+  `UserId` + `RunLevel` is correct.
+- **Verify headlessly:** `schtasks /query /tn "\OGA\HostSurvey" /xml` after a test install; the empty
+  `\OGA\` scheduler folder left after `/delete` is harmless.
+
+**Inline-flags quick alternative** (no XML, no substitution CA), with its limitation:
+`schtasks /create /tn "\OGA\HostSurvey" /tr "\"[INSTALLFOLDER]OGA.HostSurvey.Agent.exe\"" /sc DAILY /st 02:00 /ru SYSTEM /rl HIGHEST /f`
+— simplest, but **cannot** express `StartWhenAvailable` (missed-run catch-up) or `RandomDelay`. Fine
+for always-on servers; not for VMs that are frequently powered off.
