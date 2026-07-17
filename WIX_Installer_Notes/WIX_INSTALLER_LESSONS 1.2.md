@@ -13,6 +13,12 @@ Working examples of everything below: `deploy/installer/Package.wxs`,
 > Dashboards installer already satisfies (verified — see the note there); §10 the Dashboards
 > installer does **not** need (its collection scheduler runs in-process inside the Windows service),
 > and is kept as a reference for agent-style installers that do.
+>
+> Cross-project note (v1.2): §6's core claim — appended high-Order `Publish` rows never execute —
+> was **independently re-confirmed** by a second project (the OGA Host Survey agent installer,
+> WiX 7, July 2026), which hit the same silent-no-page symptom, and its diagnosis added the
+> WiX3-era-condition trap, the probe-diff extraction technique, and the ICE17/ICE31 checklist now
+> folded into §6.
 
 ---
 
@@ -117,11 +123,45 @@ Three cooperating pieces (all in `Package.wxs` + `CustomActions.cs`):
 
 - **You cannot insert a page by appending `Publish` rows with a high `Order`.** ControlEvents run
   in order, and the stock `NewDialog → VerifyReadyDlg` (Order 4) switches dialogs immediately —
-  appended rows never execute. Symptom: your page silently never appears.
-- The working approach: **clone the entire stock dialog-set navigation** (the `Publish` rows from
-  `WixUI_InstallDir.wxs` in the wix repo) into your own `<UI>`, insert your page in the chain,
-  drop `<ui:WixUI>` and keep `<UIRef Id="WixUI_Common" />` (which brings the stock dialogs, fonts
-  and loc strings). Remember `DialogRef`s for ErrorDlg/FatalError/UserExit/Progress/etc.
+  the **first** NewDialog whose condition holds wins, and appended rows never execute. Symptom:
+  your page silently never appears. (Confirmed twice — Dashboards and Host Survey — from verbose
+  install logs where the custom dialog had *zero* `Dialog created` mentions.)
+- **A second way the same splice dies: WiX3-era conditions.** The classic internet recipe gates the
+  spliced NewDialog on `WIXUI_DONTVALIDATEPATH OR WIXUI_INSTALLDIR_VALID="1"` — but this WixUI
+  generation validates the path via a `CheckTargetPath` ControlEvent (Order 1, which halts the
+  event chain on a bad path) and **never sets `WIXUI_INSTALLDIR_VALID` at all**, so the condition
+  is always false. Either failure mode looks identical from the outside; check the *stock* rows'
+  actual events/conditions in the ControlEvent table before assuming yours will run.
+- The working approach: **clone the entire stock dialog-set navigation** into your own `<UI>`,
+  insert your page in the chain, drop `<ui:WixUI>` and keep `<UIRef Id="WixUI_Common" />` (which
+  brings the stock dialogs and loc strings). Remember `DialogRef`s for
+  ErrorDlg/FatalError/UserExit/Progress/etc.
+- **Don't copy the rows from the wix repo — extract them from your own build (probe-diff).** The
+  stock rows drift across WixUI versions (see the CheckTargetPath point above). Build the package
+  twice: once with `<ui:WixUI>` (reference), once with only the skeleton `<UI>` (UIRef + DialogRefs;
+  needs `-p:SuppressValidation=true` to link), then diff the two MSIs' `ControlEvent`, `Property`,
+  and `TextStyle` tables (COM `OpenDatabase`, §8). Rows present only in the reference are *exactly*
+  the set-level navigation to clone — conditions and Ordering included, nothing guessed. Rewire
+  just your insertion points (keep your NewDialog at the stock Order, e.g. 4, *after*
+  CheckTargetPath/SetTargetPath; on VerifyReadyDlg gate the Back-to-your-page row on
+  `NOT Installed` and leave the maintenance/patch Back rows stock).
+- **ICE17 and ICE31 are your checklist, not your enemy.** A validated build of the bare skeleton
+  fails ICE17 listing every "Do Nothing" button — that list *is* the set-level navigation you must
+  supply. ICE31 fails until you clone the three `TextStyle`s (`WixUI_Font_Normal` Tahoma 8,
+  `_Bigger` 12, `_Title` 9 bold) + `DefaultUIFont` — the fonts live in the stock set, **not** in
+  WixUI_Common. Also re-add what the `<ui:WixUI>` element itself used to emit:
+  `WIXUI_INSTALLDIR=<YourFolderId>` (replaces the `InstallDirectory` attribute) and `ARPNOMODIFY=1`.
+  When the final build passes ICE17 cleanly, every button is wired.
+- **Stale-artifact trap while iterating:** a build that fails only at ICE validation still leaves a
+  fully linked MSI in `obj\`, and a subsequent incremental build can copy that stale MSI to `bin\`
+  as a "success" — poisoning table forensics. Clean `obj\` between probe builds (kin to §8's
+  MSB3030 note).
+- **Verify in the tables first, then in a log:** the target button (e.g. `InstallDirDlg/Next`) must
+  show exactly **one** NewDialog row — yours. Then a verbose-log run's `Dialog created` sequence
+  proves the runtime order.
+- Wizard-page properties double as silent-install properties. **Pre-check a checkbox by giving its
+  property a `Value="1"` default** — but that default now applies to silent installs too, flipping
+  the omission semantics (`PROP=""` to opt out instead of `PROP=1` to opt in). Document it.
 - **`session.Message` from a DoAction inside a dialog's event loop is silently suppressed** — no
   message box will appear. Feedback pattern that works: the CA writes its result text into a
   property; the button publishes `DoAction` (Order 1) then `SpawnDialog` of a small result dialog
