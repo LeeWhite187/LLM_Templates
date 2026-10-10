@@ -1,13 +1,13 @@
-# EF Core — Conventions & Patterns (go-by)
+# EF Core - Conventions & Patterns (go-by)
 
-**Revision 1.1 — 2026-10-08.** §3 gains the gated-execution warning (why EF's history table — not
-object-existence guards — is the re-run protection, and what happens in hand-rolled runners without
-it) and §4 gains §4a *Destructive migrations, old engine floors, and the upgrade matrix* — from
+**Revision 1.1 - 2026-10-08.** §3 gains the gated-execution warning (why EF's history table - not
+object-existence guards - is the re-run protection, and what happens in hand-rolled runners without
+it) and §4 gains §4a *Destructive migrations, old engine floors, and the upgrade matrix* - from
 PlantDataCache (Prospector) field feedback: a live SQL 2008 R2 upgrade failed when a non-EF script
 runner re-ran history (post-mortem: bmx.Historical_Queries `docs/references/DB_MIGRATION_PRACTICES.md`).
 
 Field-proven EF Core 8 conventions from the Facility Dashboard Platform, written to be **lifted into
-the next EF Core project**. Each is small, load-bearing, and was chosen for a concrete reason — not a
+the next EF Core project**. Each is small, load-bearing, and was chosen for a concrete reason - not a
 generic EF tutorial. Working examples live in `src/Dashboards.DataAccess/` and
 `src/Dashboards.Host/Program.cs`.
 
@@ -20,18 +20,18 @@ tooling that EF can't express (see §7).
 
 **Problem.** SQL Server `datetime2` carries no kind, so EF materializes every `DateTime` as
 `Kind=Unspecified`. A later `.ToUniversalTime()` / `.ToLocalTime()` then silently shifts it by the
-host's UTC offset — a bug that only shows up on a machine whose clock isn't UTC.
+host's UTC offset - a bug that only shows up on a machine whose clock isn't UTC.
 
 **Fix.** Stamp `Kind=Utc` on every `DateTime` as it's read, applied globally via `ConfigureConventions`
 so no per-property annotation is needed (covers nullable `DateTime?` too).
 
-The converter — `UtcDateTimeValueConverter.cs`:
+The converter - `UtcDateTimeValueConverter.cs`:
 
 ```csharp
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 /// <summary>
-/// Stamps DateTimeKind.Utc onto every DateTime read from the database. Write side is passthrough —
+/// Stamps DateTimeKind.Utc onto every DateTime read from the database. Write side is passthrough -
 /// store UTC (DateTime.UtcNow). All timestamps in this schema are UTC by convention.
 /// </summary>
 public class UtcDateTimeValueConverter : ValueConverter<DateTime, DateTime>
@@ -54,7 +54,7 @@ protected override void ConfigureConventions(ModelConfigurationBuilder configura
 }
 ```
 
-- **Read side is the point** (Kind stamped); **write side is passthrough** — you must store UTC
+- **Read side is the point** (Kind stamped); **write side is passthrough** - you must store UTC
   (`DateTime.UtcNow`), which the code does throughout.
 - `.Properties<DateTime>()` at the convention level hits **all** `DateTime` properties, nullable
   included, with zero per-entity wiring.
@@ -63,13 +63,13 @@ protected override void ConfigureConventions(ModelConfigurationBuilder configura
 - Name columns/properties `…Utc` (e.g. `CreatedAtUtc`, `LastSeenUtc`) so the convention's assumption
   is self-documenting at every call site.
 
-### 1a. The serialization boundary — the *other* half
+### 1a. The serialization boundary - the *other* half
 
 The EF converter fixes the value **in memory**; it does nothing about how a `DateTime` crosses the
 wire. `System.Text.Json` writes a `Kind=Unspecified` value with **no offset and no `Z`**, so a browser
-(`new Date(...)`, Angular's `date` pipe) reads it as **local** time — every user-presented timestamp is
+(`new Date(...)`, Angular's `date` pipe) reads it as **local** time - every user-presented timestamp is
 off by the viewer's UTC offset. Pair the EF converter with a JSON converter that forces the `Z`, and
-register it on **every** serialization boundary — MVC responses **and** the SignalR protocol:
+register it on **every** serialization boundary - MVC responses **and** the SignalR protocol:
 
 ```csharp
 public sealed class UtcDateTimeConverter : JsonConverter<DateTime>
@@ -102,7 +102,7 @@ render wrong in the browser even though they're correct in the database.
 ### 1b. The modern alternative
 
 For a **new** schema, `DateTimeOffset` mapped to SQL `datetimeoffset` sidesteps the whole class of
-problem — the offset travels with the value, so there's no kind to lose and no boundary to patch. The
+problem - the offset travels with the value, so there's no kind to lose and no boundary to patch. The
 converter pair above is the right fix when you're on `DateTime`/`datetime2` (existing schema, or a
 deliberate "store UTC, no offset" choice).
 
@@ -126,7 +126,7 @@ scoped, thread-safe context (a `DbContext` is not thread-safe, and long-lived co
 tracked entities). Controllers use the same pattern for consistency. Inject
 `IDbContextFactory<TContext>` anywhere, including singletons.
 
-## 3. Schema-version gate — verify, never auto-migrate
+## 3. Schema-version gate - verify, never auto-migrate
 
 The service **refuses to start** if the database schema is behind the binaries, rather than silently
 `Database.Migrate()`-ing a production DB. A `SchemaInfo.CurrentVersion` constant in the domain is the
@@ -143,7 +143,7 @@ if (!check.IsCompatible)
 }
 ```
 
-- **Migrations are forward-only / strictly monotonic** — never renumber or reorder a shipped version.
+- **Migrations are forward-only / strictly monotonic** - never renumber or reorder a shipped version.
   Corollary: **a shipped migration is immutable**; corrections and cleanups are *new* migrations,
   never edits to history (the recorded version is only meaningful if everything below it never changes).
 - The service never migrates; a **DBA-runnable idempotent SQL script** (generated from the migrations,
@@ -152,15 +152,15 @@ if (!check.IsCompatible)
   the log, not a half-migrated database or a silent auto-change.
 - **Why execution must be GATED, not merely guarded (field-found, PlantDataCache/Prospector).** EF's
   runner and its `--idempotent` script decide what to run from the **`__EFMigrationsHistory` table**
-  — each migration executes at most once per database, regardless of what the schema looks like.
+  - each migration executes at most once per database, regardless of what the schema looks like.
   Keep it that way, and understand what that protects you from: a sibling project with a hand-rolled
   numbered-SQL runner instead re-ran *every* script and trusted per-script `IF COL_LENGTH(...) IS
   NULL` guards to no-op. Those guards are **era-bound** — valid only against the schema of their own
-  migration's era — so the first time a *later* migration dropped columns an older guard checked,
+  migration's era - so the first time a *later* migration dropped columns an older guard checked,
   the re-run resurrected them and the upgrade failed mid-install on the production engine.
   Object-existence checks are a crash-resume aid; **the history/version record is the only re-run
   protection**. If a project ever needs a non-EF script runner, it must gate on the recorded schema
-  version exactly as EF gates on history — and print what it actually ran.
+  version exactly as EF gates on history - and print what it actually ran.
 
 ## 4. Migration workflow (the gotchas)
 
@@ -174,7 +174,7 @@ The exact recipe, because two steps aren't obvious:
    The web/host project usually **lacks the `Microsoft.EntityFrameworkCore.Design` reference**, so it
    can't be the startup project; give the DataAccess project a small
    `IDesignTimeDbContextFactory<TContext>` so it can stand alone.
-3. **EF does not write the version row** — hand-add it to the migration's `Up()` (and the delete to
+3. **EF does not write the version row** - hand-add it to the migration's `Up()` (and the delete to
    `Down()`), mirroring an existing migration:
    ```csharp
    migrationBuilder.InsertData("SchemaVersions",
@@ -198,11 +198,11 @@ Three rules from a production migration failure (PlantDataCache/Prospector, 2026
 details differ, the physics don't):
 
 - **A migration that drops columns pays its storage debt in the same migration.** SQL Server's
-  `DROP COLUMN` is metadata-only — the dropped columns' space stays part of the physical row
+  `DROP COLUMN` is metadata-only - the dropped columns' space stays part of the physical row
   definition until the table is rebuilt. After dropping (especially wide) columns, add
   `migrationBuilder.Sql("ALTER TABLE [dbo].[T] REBUILD;")` so the ghost space is reclaimed
   immediately; otherwise every later `ALTER` on that table inherits an invisible row-size liability
-  (the 8,060-byte in-row limit counts the ghosts — the production error read *"Cannot create a row
+  (the 8,060-byte in-row limit counts the ghosts - the production error read *"Cannot create a row
   of size 8081"*).
 - **Know the floor engine's *physical* semantics, not just its syntax.** Pre-2012 SQL Server
   physically rewrites every row for `ADD <col> NOT NULL DEFAULT(...)` (2012+ makes it
@@ -210,25 +210,25 @@ details differ, the physics don't):
   the production floor hides the entire class. If the fleet includes old engines, size
   row-rewriting ALTERs against real production row widths.
 - **Test the upgrade MATRIX with the real path, not just `database update` on dev.** Dev applies
-  each migration incrementally as it's written — that never exercises the released artifact's
+  each migration incrementally as it's written - that never exercises the released artifact's
   upgrade path. Before release, run the actual deploy mechanism (the idempotent script / dbtool)
   against databases at each supported starting point: **fresh**, **the previous released version**,
   and **current** (expect a no-op). The failure shape this catches — "every past release upgraded
-  fine; *this* starting version explodes" — is invisible to any single-path test.
+  fine; *this* starting version explodes" - is invisible to any single-path test.
 
 ## 5. Store app-shaped JSON as `nvarchar(max)` strings, not EF owned-JSON
 
 Config blobs, widget bindings, view-model snapshots, etc. are stored as **plain JSON strings** and
-parsed with `System.Text.Json` in the application layer — not mapped as EF owned entities / JSON
+parsed with `System.Text.Json` in the application layer - not mapped as EF owned entities / JSON
 columns. Reasons: the shapes are versioned and evolve independently of the relational schema (a new
 optional field needs no migration), they're passed through to other layers as-is, and the app already
 owns their (de)serialization. Reach for EF's owned-types/JSON mapping only when you need to **query
-into** the JSON from SQL — which this workload never does.
+into** the JSON from SQL - which this workload never does.
 
 ## 6. Soft delete + filtered unique indexes
 
 - Mutable entities carry an `IsDeleted` (or `DecommissionedAtUtc`) flag and are filtered in queries
-  (`Where(x => !x.IsDeleted)`) rather than hard-deleted — history, references, and audit survive.
+  (`Where(x => !x.IsDeleted)`) rather than hard-deleted - history, references, and audit survive.
 - Uniqueness that should apply only to *live* rows uses a **filtered unique index**, so a re-created
   entity doesn't collide with a soft-deleted one:
   ```csharp
@@ -237,7 +237,7 @@ into** the JSON from SQL — which this workload never does.
 
 ## 7. EF for the app; raw ADO.NET only for DB-lifecycle tooling
 
-All application data access is EF Core LINQ through the `DbContext` — **no `FromSqlRaw` /
+All application data access is EF Core LINQ through the `DbContext` - **no `FromSqlRaw` /
 `ExecuteSqlRaw`** in app code. The only direct `SqlConnection` usage is out-of-band tooling that EF has
 no model for: connecting to `master` to DROP/CREATE/RESTORE the database (a standalone db tool), and an
 installer connection-test probe. Keeping raw ADO out of the app (and confined to lifecycle tools) means
@@ -246,6 +246,6 @@ one query model to reason about; it's EF everywhere that matters.
 ## 8. Testing against LocalDB with per-fixture databases
 
 Dev/test use `(localdb)\MSSQLLocalDB`. Test fixtures **create a uniquely-named database per fixture**
-(`db.Database.Migrate()` on setup), run against real SQL Server semantics, and drop it on teardown — so
+(`db.Database.Migrate()` on setup), run against real SQL Server semantics, and drop it on teardown - so
 suites are isolated and exercise the actual provider (filtered indexes, collation, `datetime2`) rather
 than the InMemory provider, which silently diverges from SQL Server on exactly those points.

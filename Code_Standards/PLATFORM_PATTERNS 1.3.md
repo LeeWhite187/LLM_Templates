@@ -1,15 +1,15 @@
-# Platform Patterns — Vertical Capability Blueprints
+# Platform Patterns - Vertical Capability Blueprints
 
-**Revision 1.3 — 2026-10-08.** §11 gains the destructive-migration rules (era-bound idempotency
+**Revision 1.3 - 2026-10-08.** §11 gains the destructive-migration rules (era-bound idempotency
 guards, immutable shipped scripts, the `DROP COLUMN` ghost-space/`REBUILD` rule, engine-floor
 physical semantics, upgrade-matrix testing) and §13 gains the version-gated-runner contract and the
-installer-output/rollback-wreckage pitfalls — all from PlantDataCache (Prospector) field feedback:
+installer-output/rollback-wreckage pitfalls - all from PlantDataCache (Prospector) field feedback:
 a live SQL 2008 R2 upgrade failed because the db tool re-ran every script and old guards resurrected
 columns a later migration had dropped (post-mortem: bmx.Historical_Queries
 `docs/references/DB_MIGRATION_PRACTICES.md`). History at the end of the file.
 
 **Purpose.** The companion to `WEB_UI_FINISH_GUIDE.md`. Where the finish guide is the *horizontal*
-lens — UI principles you **review any screen against** — this is the *vertical* lens: complete
+lens - UI principles you **review any screen against** - this is the *vertical* lens: complete
 capabilities described **end-to-end (client ↔ API ↔ service ↔ data)** that you **build from**. Each
 pattern is grounded in the Facility Dashboard Platform (FDP) with file citations, but written so the
 *shape* transfers to the next project.
@@ -17,76 +17,76 @@ pattern is grounded in the Facility Dashboard Platform (FDP) with file citations
 **Stack.** Angular 18 (standalone components) · ASP.NET Core on .NET 8 · SignalR · EF Core 8 +
 SQL Server · Windows service host. A different stack reuses the **shape and the contracts**; the code
 is the reference implementation, not the requirement. (The finish guide, by contrast, is reusable
-almost verbatim — it's about the medium, not the stack.)
+almost verbatim - it's about the medium, not the stack.)
 
 **How to read a pattern.** Each section is the same five beats:
 
-1. **Problem** — the user-or-operator pain it removes.
-2. **Shape** — the pieces and how they connect, top to bottom.
-3. **Contracts** — the few names/shapes another implementation must keep.
-4. **Implementation (FDP)** — where it lives, with `file:line` citations.
-5. **To reuse / pitfalls** — what to carry forward and the traps already paid for.
+1. **Problem** - the user-or-operator pain it removes.
+2. **Shape** - the pieces and how they connect, top to bottom.
+3. **Contracts** - the few names/shapes another implementation must keep.
+4. **Implementation (FDP)** - where it lives, with `file:line` citations.
+5. **To reuse / pitfalls** - what to carry forward and the traps already paid for.
 
 …and a one-line tie back to the finish-guide rule(s) it satisfies on the UI side.
 
 **Self-contained handoff.** You do **not** need the FDP repo to build from this. The `file:line`
-citations are *illustration* — "here's one that works" — not required reading; a pattern's **Shape**
+citations are *illustration* - "here's one that works" - not required reading; a pattern's **Shape**
 and **Contracts** beats are the actual design, and **Implementation (FDP)** just points at where a
 working copy lives. Carry the shape and the contracts forward; fork the code per project.
 
 **Contents**
 
 1. Live entity push
-2. Connectivity — detect / show / self-heal
+2. Connectivity - detect / show / self-heal
 3. Security & authorization (+ pluggable providers)
 4. Realtime connected-clients admin
 5. Diagnostics & log viewing
 6. Draft → publish & the config cascade
 7. Render & transform pipeline
-8. Data ingestion — scheduled producers
+8. Data ingestion - scheduled producers
 9. Versioned assets & telemetry-driven GC
 10. Data-edge resilience
 11. Operational backbone
 12. Break-glass recovery console
 13. Database console (fd-dbtool)
 
-Appendix — Feature patterns: broadcasting · backup/restore · export/import · station pairing
+Appendix - Feature patterns: broadcasting · backup/restore · export/import · station pairing
 
 ---
 
 ## 1. Live entity push
 
-**Problem.** Every management screen must reflect mutations — made by anyone, anywhere — **without a
+**Problem.** Every management screen must reflect mutations - made by anyone, anywhere - **without a
 manual Refresh** and without polling. Two admins editing, a station coming online, a problem clearing:
 the lists should just update.
 
 **Shape.**
 - **Server broadcasts a coalesced change signal.** At *every mutation site*, the controller/service
-  calls `Notify("&lt;channel&gt;")` — `"dashboards"`, `"stations"`, `"problems"`, `"admin-sessions"`,
+  calls `Notify("&lt;channel&gt;")` - `"dashboards"`, `"stations"`, `"problems"`, `"admin-sessions"`,
   `"tasks"`, `"sources"`, … A central broadcaster **coalesces per-channel** over a short window (so a
   burst of edits is one push) and sends a single `ModelChanged { area }` over SignalR to a group all
   management clients have joined.
 - **Client turns a channel into an observable.** A live service connects to `/hubs/live`, joins the
   group, and exposes `of(channel): Observable&lt;void&gt;`. A page subscribes and refetches:
   `liveChanges.of('dashboards').pipe(takeUntilDestroyed(...)).subscribe(() => this.load())`. That's the
-  whole contract — the event carries only the channel name; the client re-pulls the truth.
+  whole contract - the event carries only the channel name; the client re-pulls the truth.
 - **Selection survives the refresh.** Lists hold the selected row **by id** and re-resolve it on every
   reload, so a live update never loses or mis-aims the selection (and if another admin deleted it, the
   toolbar grays instead of pointing at a ghost).
 - **Push, not fetch-on-interaction.** Where a control would otherwise GET on every open (a picker's
-  list), subscribe to the relevant channels and refetch on the push instead — see the area picker.
+  list), subscribe to the relevant channels and refetch on the push instead - see the area picker.
 
 **Contracts.**
 - One event shape: `ModelChanged { area: string }`; a fixed set of **named channels**.
-- Client `of(area)` ⇄ server `Notify(area)` — and `Notify` must fire at **every** write that changes
+- Client `of(area)` ⇄ server `Notify(area)` - and `Notify` must fire at **every** write that changes
   what a channel represents.
 - A **coalescing window** server-side so N rapid writes are one push.
 
 **Implementation (FDP).**
-- `src/Dashboards.Host/Services/ChangeBroadcaster.cs` — `Notify(area)`, the per-area coalescing
+- `src/Dashboards.Host/Services/ChangeBroadcaster.cs` - `Notify(area)`, the per-area coalescing
   (~1.5 s), and the `SendAsync("ModelChanged", new { area })` to the `admin-updates` group.
-- `src/Dashboards.Host/Hubs/LiveHub.cs` — `JoinAdminUpdates()` (a management client opts in).
-- `src/web/projects/authoring/src/app/services/changes.service.ts` — the SignalR connection and
+- `src/Dashboards.Host/Hubs/LiveHub.cs` - `JoinAdminUpdates()` (a management client opts in).
+- `src/web/projects/authoring/src/app/services/changes.service.ts` - the SignalR connection and
   `of(area)`.
 - Mutation sites call it: e.g. `TasksController` (`_changes.Notify("tasks"); _changes.Notify("sources")`),
   `BroadcastService`, `OpsController`, `AdminSessionRegistry`.
@@ -94,13 +94,13 @@ the lists should just update.
   (merge of five channels, debounced, refetch on push).
 
 **To reuse / pitfalls.**
-- **Miss one `Notify` and that surface goes stale** — the discipline is "every write notifies its
+- **Miss one `Notify` and that surface goes stale** - the discipline is "every write notifies its
   channel." Treat it like raising an event, not an afterthought.
 - **Coalesce**, or a bulk operation becomes a push storm.
-- **Drafts deliberately don't notify** — a private editing session shouldn't spam the facility; only
+- **Drafts deliberately don't notify** - a private editing session shouldn't spam the facility; only
   the publish does. (This is why a draft-only area doesn't push; see the finish guide's input
   rules and the area picker.)
-- The event is **just the channel** — never ship the payload in the event; let the client refetch, so
+- The event is **just the channel** - never ship the payload in the event; let the client refetch, so
   authorization and shaping stay on the server.
 
 *Finish-guide tie:* §5 (live data refreshes itself), §7 (no manual Refresh on a self-refreshing list;
@@ -108,28 +108,28 @@ selection held by id).
 
 ---
 
-## 2. Connectivity — detect / show / self-heal
+## 2. Connectivity - detect / show / self-heal
 
-**Problem.** When the client loses the backend — a stopped service, a dropped link, a firewall hiccup —
+**Problem.** When the client loses the backend - a stopped service, a dropped link, a firewall hiccup -
 the UI must **say so**, not read as "the buttons don't work." And after a server **upgrade**, stale
 clients must not silently run old code against a new API.
 
 **Shape.**
-- **One connection state, three surfaces.** A single client signal — `connecting | online |
-  reconnecting` — drives an always-on **status dot** (green/amber/red + label) and, the moment the link
+- **One connection state, three surfaces.** A single client signal - `connecting | online |
+  reconnecting` - drives an always-on **status dot** (green/amber/red + label) and, the moment the link
   drops, a **"service unreachable" banner** with a *Retry now* button, auto-cleared on recovery.
 - **Detect on three independent channels**, so neither a transport quirk nor an idle page hides an
   outage:
-  1. **The live socket's own lifecycle** — `onreconnecting → lost`, `onreconnected → online`,
-     `onclose → lost` — with **reconnect-forever, capped backoff** (e.g. 2 s for the first few tries,
+  1. **The live socket's own lifecycle** - `onreconnecting → lost`, `onreconnected → online`,
+     `onclose → lost` - with **reconnect-forever, capped backoff** (e.g. 2 s for the first few tries,
      then 10 s; *never* a fixed retry count that gives up).
   2. **Every HTTP response** via an interceptor: status `0` (no response) = transport down → `lost`;
      any actual response (even 4xx/5xx) = the link is fine → `online`.
-  3. **A small periodic heartbeat** — an ~8 s `GET /api/v1/me` — which **bounds worst-case detection
+  3. **A small periodic heartbeat** - an ~8 s `GET /api/v1/me` - which **bounds worst-case detection
      latency** independent of socket timings.
 - **Version self-heal.** Every response carries a build-stamp header (`X-FD-Version`). The client
-  **baselines the first** value and, on any later mismatch, shows a *"server was updated — reload"*
-  banner; reloading re-baselines. (Admins can also remote-reload outdated UIs — §4.)
+  **baselines the first** value and, on any later mismatch, shows a *"server was updated - reload"*
+  banner; reloading re-baselines. (Admins can also remote-reload outdated UIs - §4.)
 - **Durable server liveness.** A `HeartbeatService` writes a heartbeat row (version, started-at) every
   ~30 s, which the offline recovery tool reads to tell "hung" from "stopped."
 
@@ -143,20 +143,20 @@ clients must not silently run old code against a new API.
 - `src/web/projects/authoring/src/app/services/connection-status.service.ts` (the `connecting/online/
   reconnecting` signal), `changes.service.ts` (`withAutomaticReconnect` + the socket lifecycle hooks),
   `version-watch.service.ts` (the HTTP interceptor + `X-FD-Version` baseline/mismatch).
-- `app.component.ts` — the status dot, the unreachable + update banners, and the ~8 s heartbeat to
+- `app.component.ts` - the status dot, the unreachable + update banners, and the ~8 s heartbeat to
   `/api/v1/me`.
 - Server: `Program.cs` stamps every response with `X-FD-Version`; `HeartbeatService` (in
   `Services/BackupService.cs`) writes the liveness row.
 
 **To reuse / pitfalls.**
-- **Reconnect forever.** A fixed retry count strands the UI after a long outage — the exact moment
+- **Reconnect forever.** A fixed retry count strands the UI after a long outage - the exact moment
   recovery matters most.
-- **Multiple detection channels** — the socket alone misses a half-open connection; HTTP alone misses
+- **Multiple detection channels** - the socket alone misses a half-open connection; HTTP alone misses
   an idle page; the heartbeat bounds the worst case.
 - **The dead-lazy-route trap** (finish §2): a code-split SPA caches a *failed* route import as
   permanently rejected, so a click made during an outage stays dead after recovery. Preload route code
   up front and, on a code-load failure, probe and hard-reload when the backend answers.
-- **Stamp the version on the response, not a separate poll** — you get upgrade detection for free on
+- **Stamp the version on the response, not a separate poll** - you get upgrade detection for free on
   traffic you're already making.
 
 *Finish-guide tie:* §2 (no dead controls; outage-proof navigation), §6 (failure is a UI state;
@@ -166,7 +166,7 @@ connectivity shown, never silent), §5 (status as color + word).
 
 ## 3. Security & authorization (+ pluggable providers)
 
-**Problem.** Authenticate against the corporate domain, but **authorize on the platform's own roles** —
+**Problem.** Authenticate against the corporate domain, but **authorize on the platform's own roles** -
 OS/AD membership (including local Administrators and Domain Admins) must grant **nothing**. Seed the
 first administrator, recover when everyone's locked out, and keep integrations (mail, TLS, render
 primitives) **pluggable**.
@@ -178,23 +178,23 @@ primitives) **pluggable**.
   (`Admin`, `Developer`, `TaskManagement`, `Media`, `Broadcasters`, and `AnyManagement`) are backed by
   a single requirement handler that resolves the caller's groups from the DB (short-TTL cached) and
   succeeds if they hold any required group. **Windows/AD membership maps to no platform group by
-  design** — elevation and "Run as administrator" change nothing.
+  design** - elevation and "Run as administrator" change nothing.
 - **Bootstrap + break-glass.** A config list (`BootstrapAdmins`) ensures an Admin membership for named
   identities at every startup. A **separate, elevation-gated recovery tool** runs directly against the
-  database (works when the service is down) to restore group membership or fix TLS — elevation *is* the
+  database (works when the service is down) to restore group membership or fix TLS - elevation *is* the
   access gate (only local admins get an elevated token). Full blueprint: *Break-glass recovery console*.
 - **Gray, don't hide.** The nav shows pages a user's groups don't unlock **grayed with a lock + a
   why-tooltip** ("needs the Developer or Media group; an admin can grant it on the Users page"), never
-  hidden — a control that comes and goes teaches the UI is unstable.
+  hidden - a control that comes and goes teaches the UI is unstable.
 - **Live security invalidation.** When an admin changes a user's groups, the server pushes
   `SecurityChanged` to that user's open connections so their UI re-evaluates immediately.
 - **Pluggable providers** (the extensibility seams):
-  - **Notifications** — an `INotificationProvider` interface with SMTP + always-on Log implementations,
+  - **Notifications** - an `INotificationProvider` interface with SMTP + always-on Log implementations,
     fanned out by a dispatcher that **throttles per event-key** (a flapping station can't spam).
-  - **TLS/certificate** — a service with clear **precedence** (admin-selected → deploy-time default →
+  - **TLS/certificate** - a service with clear **precedence** (admin-selected → deploy-time default →
     self-signed bootstrap persisted with DPAPI) and **hot-reload** via Kestrel's per-handshake selector
     (no dropped connections).
-  - **Render primitives** — a manifest-described **catalog**; a new primitive is a manifest + a render
+  - **Render primitives** - a manifest-described **catalog**; a new primitive is a manifest + a render
     component, with no change to the dashboard/widget/runtime core.
 
 **Contracts.**
@@ -204,12 +204,12 @@ primitives) **pluggable**.
 - Provider **interfaces + DI registration**; "list of providers, dispatch to all."
 
 **Implementation (FDP).**
-- `src/Dashboards.Host/Program.cs` — `AddNegotiate()`; `AddPolicy(Policies.*, … new GroupRequirement(…))`;
+- `src/Dashboards.Host/Program.cs` - `AddNegotiate()`; `AddPolicy(Policies.*, … new GroupRequirement(…))`;
   the `BootstrapAdmins` seeding; the `X-FD-Version` stamp.
 - `src/Dashboards.Host/Security/GroupAuthorization.cs` (`GroupRequirementHandler`),
   `Security/UserDirectory.cs` (`GetGroupsAsync` + ~10 s cache), `Dashboards.Domain/Enums.cs`
   (`PermissionGroupKind`).
-- `src/Dashboards.RecoveryTool/` (`RecoveryApp.cs`) — elevation gate + DB-direct membership/TLS repair.
+- `src/Dashboards.RecoveryTool/` (`RecoveryApp.cs`) - elevation gate + DB-direct membership/TLS repair.
 - Nav lockout: `app.component.ts` (`canAccess` / `lockTitle`).
 - Providers: `Dashboards.Domain/Contracts/NotificationContracts.cs` (`INotificationProvider`),
   `Services/NotificationDispatcher.cs` (SMTP/Log + per-key throttle), `Services/CertificateService.cs`
@@ -217,26 +217,26 @@ primitives) **pluggable**.
 
 **To reuse / pitfalls.**
 - **Authorize on your roles, not the OS's.** That AD/local-admin grants nothing is a *deliberate,
-  must-document surprise* — the #1 "I'm an admin but every page says no privileges" support call. Say
+  must-document surprise* - the #1 "I'm an admin but every page says no privileges" support call. Say
   it loudly in the guide.
 - **Short cache TTL** on group resolution so a recovery-tool grant takes effect in seconds, not on
   restart.
-- **The break-glass tool is separate from the service and gated by elevation** — it must work when the
+- **The break-glass tool is separate from the service and gated by elevation** - it must work when the
   service won't start, and it must not be reachable through normal UI.
 - **Throttle notifications by key**; **hot-reload TLS** without dropping the listener; keep the
   primitive catalog **additive** (new manifest, no core edits).
 
-*Finish-guide tie:* §2 (guard-rails — refuse to remove the last admin, with a human reason), §7
-(gray-don't-hide — a control that exists but is unavailable always explains itself).
+*Finish-guide tie:* §2 (guard-rails - refuse to remove the last admin, with a human reason), §7
+(gray-don't-hide - a control that exists but is unavailable always explains itself).
 
 ---
 
 ## 4. Realtime connected-clients admin
 
 **Problem.** An operator needs to see, **live and from one screen**, which displays and which
-management UIs are connected right now, what each is showing, and to **act on them remotely** — assign
+management UIs are connected right now, what each is showing, and to **act on them remotely** - assign
 a dashboard, reload, flash an identify overlay, decommission a screen; reload or disconnect a stale
-admin UI — without walking the building.
+admin UI - without walking the building.
 
 **Shape.**
 - **Two in-memory registries of *current* connections** (distinct from the durable DB records): one
@@ -245,13 +245,13 @@ admin UI — without walking the building.
   change, so the Stations and Admin Sessions pages **self-refresh** (vertical §1).
 - **Telemetry in, commands out, over the hub.** Displays report what dashboard/version they're
   presenting (and any render errors → problems, §5). A **`StationMonitor` sweep** reconciles each
-  station's state — *Connected* (in the live directory) vs *Transient* (seen within the threshold) vs
-  *Disconnected* (past it) — raising/clearing offline problems and notifying. Remote actions are hub
+  station's state - *Connected* (in the live directory) vs *Transient* (seen within the threshold) vs
+  *Disconnected* (past it) - raising/clearing offline problems and notifying. Remote actions are hub
   messages pushed to the **target connection**: reload, identify overlay, admin-reload/disconnect;
   assignment rebinds the station's hub group and pushes fresh state.
 - **Don't-target-self guard.** An admin can't reload/disconnect the very session they're working in.
 - **Restart-safe by construction.** The registries are ephemeral: a service restart clears them, every
-  client reconnects and re-registers, and transient flags (identify overlays) reset — *no stuck state*.
+  client reconnects and re-registers, and transient flags (identify overlays) reset - *no stuck state*.
 
 **Contracts.**
 - An **in-memory connection directory** keyed by connection id (and entity id/token), separate from the
@@ -271,35 +271,35 @@ admin UI — without walking the building.
 
 **To reuse / pitfalls.**
 - **"Who's connected *now*" is in-memory; the durable record is in the DB.** Don't try to persist the
-  live set — restart-clears-it is the *correct* behavior, and clients re-register on reconnect.
+  live set - restart-clears-it is the *correct* behavior, and clients re-register on reconnect.
 - **Reconcile against last-seen** to separate a brief blip (Transient) from a real outage
-  (Disconnected) — and notify only once per outage (a notified-at marker), throttled.
+  (Disconnected) - and notify only once per outage (a notified-at marker), throttled.
 - **Guard remote actions against the caller's own session**, and make identify/diagnostic overlays
   **fail safe** (clear on restart) so a screen never gets stuck wearing one.
 
 *Finish-guide tie:* §5 (live status as color + word; the UI shows only what it knows), §2 (destructive
-remote actions — decommission/disconnect — confirm with consequences).
+remote actions - decommission/disconnect - confirm with consequences).
 
 ---
 
 ## 5. Diagnostics & log viewing
 
 **Problem.** When something goes wrong, an operator needs the **"why"** (a searchable log) and a
-**consolidated, self-clearing list of what's currently broken** — both from the admin UI, without
+**consolidated, self-clearing list of what's currently broken** - both from the admin UI, without
 remoting into the host to tail a file.
 
 **Shape.**
 - **Structured diagnostics, dual-written.** Every entry goes to *both* the database (queryable: level,
   category, time, user) *and* the standard log sink (file + Windows Event Log). A **Diagnostics page**
-  filters by level / category / trailing-window with an **auto-refresh toggle** — push isn't wired for a
+  filters by level / category / trailing-window with an **auto-refresh toggle** - push isn't wired for a
   rolling log, so reading and following are an explicit choice (finish §5).
 - **The Problems overview is a keyed upsert store.** `RaiseAsync(kind, key, title, detail)` and
-  `ClearAsync(key)`: the **stable key** is the identity — the same condition updates one record
+  `ClearAsync(key)`: the **stable key** is the identity - the same condition updates one record
   (occurrence count + last-seen) instead of spawning duplicates, and **clears itself** when the
   condition resolves. Low-priority entries dim rather than shout. The page subscribes to `"problems"`
   (self-refresh, §1); admins resolve.
 - **Two feeders, proactive + reactive.** Proactive: a hosted sweep renders the dashboards actually live
-  on stations and raises/clears a problem per failing widget — catching **server-side** resolution
+  on stations and raises/clears a problem per failing widget - catching **server-side** resolution
   failures (unbound/missing/unreadable source) that a client never reports. Reactive: stations report
   their own **client-side** render errors via telemetry. Together they cover both blind spots.
 - **In-editor diagnostics** close the loop: the dashboard editor's *Check render* runs one widget
@@ -311,27 +311,27 @@ remoting into the host to tail a file.
 - **Proactive + reactive** feeders into the same store.
 
 **Implementation (FDP).**
-- `src/Dashboards.Host/Services/DiagnosticsService.cs` — `LogAsync` (DB + Serilog dual-write,
+- `src/Dashboards.Host/Services/DiagnosticsService.cs` - `LogAsync` (DB + Serilog dual-write,
   truncation, fail-soft) and `ProblemService` (`RaiseAsync`/`ClearAsync` keyed upsert, `Notify
   ("problems")`).
-- `Services/RenderProblemMonitor.cs` — the proactive sweep (live dashboards → per-widget raise/clear).
-- `Hubs/LiveHub.cs` — the reactive `ReportTelemetry` render-error path.
-- `Controllers/OpsController.cs` — the `diagnostics` (level/category/since/take) and `problems`
+- `Services/RenderProblemMonitor.cs` - the proactive sweep (live dashboards → per-widget raise/clear).
+- `Hubs/LiveHub.cs` - the reactive `ReportTelemetry` render-error path.
+- `Controllers/OpsController.cs` - the `diagnostics` (level/category/since/take) and `problems`
   (+ resolve) endpoints. UI: `pages/diagnostics.page.ts`, `pages/problems.page.ts`; the editor's
   *Check render* in `pages/dashboard-editor.page.ts`.
 
 **To reuse / pitfalls.**
-- **Key problems by stable identity** so one condition is one row that clears cleanly — the same
+- **Key problems by stable identity** so one condition is one row that clears cleanly - the same
   discipline as the *Operational backbone* sweeps. Get the key wrong and the list fills with near-duplicates that never
   resolve.
-- **Proactive *and* reactive** — server-side failures the client can't see, plus client-only render
+- **Proactive *and* reactive** - server-side failures the client can't see, plus client-only render
   errors the server can't see; either alone has a blind spot.
 - **Dual-write the log** so a DB hiccup doesn't lose the operator's trail (and vice-versa); truncate
   long messages.
 - **Auto-refresh only where push isn't wired** (a rolling log); everywhere push exists, self-refresh.
 
 *Finish-guide tie:* §5 (auto-refresh toggle where push is absent; status as color + word), §6 (failure
-is a UI state, surfaced — not a silent gap).
+is a UI state, surfaced - not a silent gap).
 
 ---
 
@@ -339,21 +339,21 @@ is a UI state, surfaced — not a silent gap).
 
 **Problem.** Configuration that drives live screens must be **editable by several people without
 clobbering**, **safe to try before it goes live**, and able to **inherit deployment defaults** while
-allowing per-entity overrides — and a later change to a default must not silently move things already
+allowing per-entity overrides - and a later change to a default must not silently move things already
 published.
 
 **Shape.**
 - Each versioned entity is a **head row + an immutable version chain**. Consumers either **follow
-  latest** (late binding — a publish reaches them automatically) or **pin** a specific version.
+  latest** (late binding - a publish reaches them automatically) or **pin** a specific version.
 - Editing never touches a published version. It happens in a **draft**: a working-model JSON, a
-  **change journal** (every edit is an event — undo/redo walk it; rollback resets to the base
+  **change journal** (every edit is an event - undo/redo walk it; rollback resets to the base
   version), and a **single-editor lock** with periodic liveness so a buried browser tab can't
   silently hold or overwrite.
 - **Publish** validates, snapshots the draft into a *new immutable version*, **squashes** the journal,
   releases the lock, and pushes a live update to consumers following latest.
 - **Config resolves global → entity → version.** A value either inherits the global default or is
   overridden; the UI shows an **Override** toggle and the *effective inherited value* (never a blank
-  box). **Structural** values (those a layout was validated against — e.g. a border that consumes
+  box). **Structural** values (those a layout was validated against - e.g. a border that consumes
   space) are **snapshotted at publish** so a later default change can't move a published layout;
   **presentation** values (colors, fonts) **late-bind** through the theme.
 
@@ -366,22 +366,22 @@ published.
   happened to be at publish.
 
 **Implementation (FDP).**
-- `src/Dashboards.Host/Services/VersioningService.cs` — the engine: `CreateDraftAsync` /
+- `src/Dashboards.Host/Services/VersioningService.cs` - the engine: `CreateDraftAsync` /
   `ResolveBaseModelAsync` (build the draft model from a version, carrying head fields like name &
   area), `AcquireLockAsync` / `ReportLivenessAsync` / `ReleaseLockAsync` (single-editor lock, FR-62..66),
   `UndoAsync` / `RedoAsync` / `RollbackToBaseAsync`, `PublishDraftAsync` (validate → new version →
   squash journal → swap live), and the config-snapshot helpers `MergeDashboardOverrides` /
   `ReadBorderInherited` (the structural-vs-presentation + inherited-marker logic).
-- `src/Dashboards.Host/Controllers/DraftsController.cs` — REST surface; note the **lock guard** on
+- `src/Dashboards.Host/Controllers/DraftsController.cs` - REST surface; note the **lock guard** on
   destructive ops (`Discard` refuses when another user holds the lock, `DraftsController.cs:263`).
-- Client: `src/web/projects/authoring/src/app/services/draft-session.ts` (`DraftSession` — open/lock/
+- Client: `src/web/projects/authoring/src/app/services/draft-session.ts` (`DraftSession` - open/lock/
   liveness/commit/undo/redo/publish) and the editor pages, which **commit on settle** and show
   read-only state when displaced.
 - Config DTO with the override fields: `src/Dashboards.Dtos/DraftModels.cs`; the resolver
   `RenderService.MergeConfig` / `BuildRenderAsync` (global → dashboard → version).
 
 **To reuse / pitfalls.**
-- **Forward-only versioning is load-bearing** — a startup guard refuses to run against a schema ahead
+- **Forward-only versioning is load-bearing** - a startup guard refuses to run against a schema ahead
   of the binaries; never publish a version going *backward*. (See *Operational backbone*.)
 - The **structural-vs-presentation split** is the subtle part: snapshot what a layout was validated
   against, late-bind the rest. Getting this wrong means either published screens drift on a global
@@ -389,7 +389,7 @@ published.
 - The **inherited marker** (record intent, not just the resolved number) was field-found: a value
   published while the default was 0 otherwise pins to 0 forever and ignores a later default.
 - **Lock liveness + displaced-editor read-only**: a draft left open in an idle tab must drop to
-  read-only on its next liveness check and be force-releasable by an admin — otherwise it strands the
+  read-only on its next liveness check and be force-releasable by an admin - otherwise it strands the
   entity.
 
 *Finish-guide tie:* §4 (inheritance explicit), §2 (confirm/guard-rails), §7 (selection-scoped lists).
@@ -403,27 +403,27 @@ can't escape), **cheaply** (compute once, not once per screen), and **extensibly
 manifest + a component, not a core change).
 
 **Shape.**
-- **A manifest-described primitive catalog.** Each renderer primitive declares a manifest — `typeId`,
+- **A manifest-described primitive catalog.** Each renderer primitive declares a manifest - `typeId`,
   category/icon, **config schema**, **view-model schema** (the contract a transform must produce),
   sample view-model, accepted binding kinds, whether it runs a transform. The client dispatches on
   `primitiveTypeId` to a render component; the server validates transform output against that schema.
   Adding a primitive = manifest + component, with no edits to dashboards/widgets/runtime.
 - **A sandboxed transform shapes source → view-model.** An author writes an **Expression** (one JS
   expression), **Script**, or **Template** (returns `{html|svg}`). It runs in an embedded JS engine with
-  **no host surface** under **hard limits** (timeout / memory / statements / recursion — each a default
+  **no host surface** under **hard limits** (timeout / memory / statements / recursion - each a default
   clamped to a maximum). The script sees `sources.<name>` (`.data` parsed-JSON, `.text` raw, `.fresh`,
   `.asOf`) and `config`, and returns the view-model; output is **schema-checked** before it's trusted.
 - **Compute-once, fan-out-many.** A view-model is computed **once per source-data version** and cached
   (key = widget-type-version + config + the sources' content-versions), then a tick pushes
-  `WidgetUpdate`s to every station showing that instance — **hash-gated**, so an unchanged widget
+  `WidgetUpdate`s to every station showing that instance - **hash-gated**, so an unchanged widget
   re-renders nobody. Stations apply the update **in place** (no component teardown).
 - **The iframe is the security boundary for untrusted output.** The **markup** primitive renders server
-  HTML in a `sandbox=""` iframe — *no scripts, no navigation, isolated origin* — delivered via `srcdoc`
+  HTML in a `sandbox=""` iframe - *no scripts, no navigation, isolated origin* - delivered via `srcdoc`
   set **imperatively** (a framework's attribute sanitizer would strip the author's `<style>`; the
   sandbox, not sanitization, is the boundary). The **embed** primitive allows scripts but blocks
   top-navigation and popups.
 - **Preview is the real pipeline, not a mock.** Authoring renders a draft/transform through the *exact*
-  path a station uses (same version resolution, bindings, transforms, staleness) — a *try-transform*
+  path a station uses (same version resolution, bindings, transforms, staleness) - a *try-transform*
   endpoint for the script editor, a *preview-render* for the dashboard editor.
 
 **Contracts.**
@@ -438,7 +438,7 @@ manifest + a component, not a core change).
 - Catalog: `src/Dashboards.Domain/Contracts/PrimitiveCatalog.cs` (the 12 manifests). Dispatch:
   `src/web/projects/primitives/src/lib/widget-host.component.ts` (`ngSwitch` on `primitiveTypeId`;
   `applyUpdate` for in-place streamed updates).
-- Sandbox: `src/Dashboards.TransformRuntime/JintTransformExecutor.cs` (engine limits —
+- Sandbox: `src/Dashboards.TransformRuntime/JintTransformExecutor.cs` (engine limits -
   `TimeoutInterval`/`MaxStatements`/`LimitRecursion`/`LimitMemory`; the `sources`/`config` scope;
   expression-vs-script wrapping; schema check against the manifest). Limit clamping:
   `GlobalConfig.SandboxLimitsConfig.ResolveOverride`.
@@ -452,25 +452,25 @@ manifest + a component, not a core change).
   `RenderService.BuildDraftPreviewAsync`.
 
 **To reuse / pitfalls.**
-- **The manifest is the extensibility contract** — keep the view-model schema additive; a breaking
+- **The manifest is the extensibility contract** - keep the view-model schema additive; a breaking
   change is a major-version event.
-- **Never render untrusted HTML in your own DOM** — the sandboxed iframe is the boundary, and beware a
+- **Never render untrusted HTML in your own DOM** - the sandboxed iframe is the boundary, and beware a
   framework's "safe" attribute binding *sanitizing away* exactly the styling the author needs (set
   `srcdoc` imperatively, let the sandbox secure it).
-- **Key the cache on content versions, not wall-clock** — "compute once per input change" is what lets
+- **Key the cache on content versions, not wall-clock** - "compute once per input change" is what lets
   one transform serve a whole building.
-- **Hash-gate the fan-out** — pushing unchanged view-models to N stations is the easy way to melt the hub.
-- **Make preview the real pipeline** — a preview that mocks the render path lies exactly when it matters.
+- **Hash-gate the fan-out** - pushing unchanged view-models to N stations is the easy way to melt the hub.
+- **Make preview the real pipeline** - a preview that mocks the render path lies exactly when it matters.
 
-*Finish-guide tie:* §2 (try/preview = immediate feedback), §6 (render/transform failure is a UI state —
+*Finish-guide tie:* §2 (try/preview = immediate feedback), §6 (render/transform failure is a UI state -
 the stale/error overlay; → *Diagnostics & log viewing*).
 
 ---
 
-## 8. Data ingestion — scheduled producers
+## 8. Data ingestion - scheduled producers
 
-**Problem.** Pull content from **systems you don't control** — a script that hits an FTP, a query that
-renders a chart, a slide deck split to images — on a schedule, **chained**, bounded, and **without ever
+**Problem.** Pull content from **systems you don't control** - a script that hits an FTP, a query that
+renders a chart, a slide deck split to images - on a schedule, **chained**, bounded, and **without ever
 serving a half-written file**.
 
 **Shape.**
@@ -479,7 +479,7 @@ serving a half-written file**.
   there as that task's source. Schedules are **interval / hourly-at-minute / daily-at-time /
   after-another-task-succeeds** (chaining).
 - **One scheduler ticks them all.** A short tick (≈5 s) computes each task's next-due (DST-safe local
-  arithmetic for hourly/daily), runs those due **under a concurrency cap**, and — key — leaves an
+  arithmetic for hourly/daily), runs those due **under a concurrency cap**, and - key - leaves an
   over-cap task **still due** so it is *delayed, never skipped*. **Chaining** fires a follower the moment
   its predecessor *succeeds*; a follower already mid-run gets **exactly one** coalesced re-trigger, never
   a backlog.
@@ -513,9 +513,9 @@ serving a half-written file**.
 - API/UI: `TasksController`, `tasks.page.ts` / `sources.page.ts`.
 
 **To reuse / pitfalls.**
-- **Over-cap = delayed, not skipped** — the subtle correctness point; otherwise you silently drop runs
+- **Over-cap = delayed, not skipped** - the subtle correctness point; otherwise you silently drop runs
   under load.
-- **Chaining is coalesced, not queued** — exactly one follow-up after a busy predecessor, or a slow
+- **Chaining is coalesced, not queued** - exactly one follow-up after a busy predecessor, or a slow
   follower builds an unbounded backlog.
 - **Atomic write is the producer's contract** (temp→rename); the reader can only ignore in-progress
   names and ride the lock window (→ *Data-edge resilience*).
@@ -532,7 +532,7 @@ right?"), §5 (freshness is a first-class signal).
 
 **Problem.** Operators upload managed assets (images, video, PDFs) that screens present; a new upload
 must **replace** the old **without yanking it off a wall mid-play**, and old versions must be
-**reclaimed** — but only once **no screen is still showing them**.
+**reclaimed** - but only once **no screen is still showing them**.
 
 **Shape.**
 - **Each asset is a version chain.** An asset has a `CurrentVersionId` pointer and immutable versions,
@@ -541,10 +541,10 @@ must **replace** the old **without yanking it off a wall mid-play**, and old ver
   written.
 - **Replacement is graceful or immediate.** Publishing a new version marks the old **Superseded** and
   either pushes an **immediate** swap or lets consumers **adopt at the next loop boundary** (a playlist
-  finishes its cycle first) — never a mid-frame yank.
+  finishes its cycle first) - never a mid-frame yank.
 - **GC is reference-counted by live telemetry.** Stations report the **asset-version ids they're
   currently presenting**. A periodic sweep collects a superseded version only when it's **in no live
-  station's presented-set** *and* past a short **grace age** — with a **time backstop** so a silent,
+  station's presented-set** *and* past a short **grace age** - with a **time backstop** so a silent,
   non-reporting station can't pin a version forever. The sweep is **paused during the backup window**
   (consistent snapshot) and also reaps **orphan `*.tmp`** files from aborted uploads.
 
@@ -563,9 +563,9 @@ must **replace** the old **without yanking it off a wall mid-play**, and old ver
 - The presented-set comes from station telemetry (→ *Realtime connected-clients admin*).
 
 **To reuse / pitfalls.**
-- **Ref-count by what's *actually on screen*, reported by the consumer — not by config references.** The
+- **Ref-count by what's *actually on screen*, reported by the consumer - not by config references.** The
   version a dashboard *references* may differ from what a station is *presenting*; telemetry is the truth.
-- **Always pair the ref-count with a time backstop** — a station that stops reporting must not pin a
+- **Always pair the ref-count with a time backstop** - a station that stops reporting must not pin a
   version (or its disk) forever.
 - **Quiesce the GC during backup** so a snapshot never captures config pointing at a just-deleted file.
 - **Graceful adoption at a boundary** keeps a swap from yanking content mid-play; offer immediate only
@@ -580,7 +580,7 @@ gracefully).
 
 **Problem.** The platform reads files a **foreign producer writes concurrently** and serves them to
 displays. A read that lands mid-write must not become a user-visible failure (a 500, a broken-image
-icon, a blank screen) — and the operator should be able to tell *why* when it does.
+icon, a blank screen) - and the operator should be able to tell *why* when it does.
 
 **Shape.**
 - **Producers write atomically**: to a temp name, then **rename** into place. The reader **ignores
@@ -597,13 +597,13 @@ icon, a blank screen) — and the operator should be able to tell *why* when it 
   per-widget window it shows the **stale** indicator (color + word/icon), distinct from an **error**.
 
 **Contracts.**
-- Atomic-write convention (temp/rename) is the **producer's** responsibility — the reader can ride a
+- Atomic-write convention (temp/rename) is the **producer's** responsibility - the reader can ride a
   *lock*, but cannot un-tear an in-place partial write.
-- Error messages **distinguish "missing / unreadable" from "empty"** — the first is usually a path or
+- Error messages **distinguish "missing / unreadable" from "empty"** - the first is usually a path or
   service-account-permission problem, the second is genuinely no content.
 
 **Implementation (FDP).**
-- Readers: `src/Dashboards.TaskEngine/ImageSourceReader.cs` (`FindNewest` / `FindAllSorted` — the
+- Readers: `src/Dashboards.TaskEngine/ImageSourceReader.cs` (`FindNewest` / `FindAllSorted` - the
   image-extension floor, the `.tmp`/`.partial` exclusion, case-insensitive sort) and
   `FolderSourceReader.cs`.
 - Ride-through + logging: `src/Dashboards.Host/Controllers/LiveController.cs` `SourceSlide` (the
@@ -618,12 +618,12 @@ icon, a blank screen) — and the operator should be able to tell *why* when it 
   `RenderService.cs` (the dynamic-slideshow branch).
 
 **To reuse / pitfalls.**
-- A UNC/network source must be readable by the **service account**, not the operator — `LocalSystem`
+- A UNC/network source must be readable by the **service account**, not the operator - `LocalSystem`
   hits a share as the machine account. A `dir` that works for you proves nothing about the service.
 - On a **regenerating set** (count shrinks), an index from the previous view-model can fall out of
   range: 404 it quietly and let the new view-model (a version token that flips on change) re-sync;
   don't error.
-- Distinguish-the-error wording pays for itself — it turns "the widget is blank" support tickets into
+- Distinguish-the-error wording pays for itself - it turns "the widget is blank" support tickets into
   a one-line answer.
 
 *Finish-guide tie:* §6 (failure is a UI state), §5 (stale signaling, color + word).
@@ -632,8 +632,8 @@ icon, a blank screen) — and the operator should be able to tell *why* when it 
 
 ## 11. Operational backbone
 
-The two infrastructure patterns the verticals above quietly rely on. (Operator *procedures* — install,
-migrate, recover — live in the admin guide; this is the architectural shape only.)
+The two infrastructure patterns the verticals above quietly rely on. (Operator *procedures* - install,
+migrate, recover - live in the admin guide; this is the architectural shape only.)
 
 **Hosted-service sweeps.** Periodic `BackgroundService`s that **reconcile state and raise/clear
 problems by a stable key**. The shape is always: a `while (!stopping)` loop wrapping a `TickAsync`
@@ -641,7 +641,7 @@ with its own `try/catch` (one bad tick never kills the loop) and a `Task.Delay(i
 **idempotent** (it computes the desired state and raises or clears, so running it twice is harmless).
 
 - Registered in `src/Dashboards.Host/Program.cs` (`AddHostedService<…>`): `StationMonitor` (offline
-  detection), `RenderProblemMonitor` (proactive render-error sweep — see §5), `MediaGcService`,
+  detection), `RenderProblemMonitor` (proactive render-error sweep - see §5), `MediaGcService`,
   `RetentionPurgeService`, `HeartbeatService` (see §2), `BackupService`, `CollectionScheduler`,
   `LiveUpdateService`.
 - Template: `src/Dashboards.Host/Services/StationService.cs` `StationMonitor` (a 30 s tick that flips
@@ -656,39 +656,39 @@ advance it. Versions are **forward-only**: shipping vN then vN-1 strands a datab
 vN. Recipe (entity → `dotnet ef migrations add` with the DataAccess project as its own startup → hand-add
 the `SchemaVersions` row → bump `SchemaInfo` → regenerate the idempotent SQL) is in the project notes.
 
-- **Pitfall:** the service never auto-migrates (KD-21) — a behind database is an explicit operator
+- **Pitfall:** the service never auto-migrates (KD-21) - a behind database is an explicit operator
   action (`fd-dbtool apply`), so an upgrade can't silently rewrite data on first run. The tool that
   makes that explicit act safe is its own pattern: *Database console (fd-dbtool)*.
 - **Pitfall (field-found, Observatory):** any view/proc DDL in a migration must be `EXEC(N'…')`-wrapped
-  — no bare `migrationBuilder.Sql("CREATE OR ALTER …")`. The regenerated idempotent DBA script wraps
+  - no bare `migrationBuilder.Sql("CREATE OR ALTER …")`. The regenerated idempotent DBA script wraps
   each op in `IF NOT EXISTS(...) BEGIN … END`, and SQL Server requires CREATE VIEW alone in its batch,
-  so one bare statement makes the whole script un-parseable — **silently**, since the EF-migrations
+  so one bare statement makes the whole script un-parseable - **silently**, since the EF-migrations
   path keeps working; nothing breaks until a DBA runs the script. Check: every `CREATE OR ALTER` in
   the regenerated script should appear inside `EXEC(N'…')`.
 - **Pitfall (field-found, PlantDataCache/Prospector): idempotency guards are era-bound.** A guard
   like `IF COL_LENGTH('T','X') IS NULL ADD [X]` means "my migration hasn't run yet" **only against
   the schema of that migration's own era**. The moment any later migration *drops or renames* what
-  an older guard checks, re-running the older script is destructive — it resurrects what was
+  an older guard checks, re-running the older script is destructive - it resurrects what was
   deliberately removed. Guards exist for crash-resume within one script; **execution gating (EF's
-  history table, or a numbered-script runner keyed to the stamped version — §13) is the only real
-  re-run protection.** Corollary: **shipped migrations are immutable** — corrections and cleanups
+  history table, or a numbered-script runner keyed to the stamped version - §13) is the only real
+  re-run protection.** Corollary: **shipped migrations are immutable** - corrections and cleanups
   are new, higher-numbered migrations, never edits to history.
 - **Pitfall (field-found, PlantDataCache/Prospector): a destructive migration pays its storage debt
-  in the same migration.** `DROP COLUMN` is metadata-only — the dropped columns' space stays in the
+  in the same migration.** `DROP COLUMN` is metadata-only - the dropped columns' space stays in the
   physical row definition until the table is rebuilt. Follow column drops (especially wide ones)
   with `ALTER TABLE … REBUILD`, or every later `ALTER` on that table inherits an invisible
   row-size liability (the 8,060-byte in-row limit counts the ghosts; the live failure read
   *"Cannot create a row of size 8081"*).
 - **Pitfall: the engine floor's *physical* semantics, not just its syntax.** Pre-2012 SQL Server
   physically rewrites every row for `ADD <col> NOT NULL DEFAULT(...)` (2012+ makes it
-  metadata-only) — same syntax, different failure modes (row-size limits, lock time). A dev engine
+  metadata-only) - same syntax, different failure modes (row-size limits, lock time). A dev engine
   newer than the production floor hides this class entirely; know which operations are rewrites on
   the floor engine.
 - **Pitfall: test the upgrade MATRIX with the real tool, not the dev shortcut.** Applying new
   migrations to dev validates the script, not the runner or the path. Before release, run the actual
   db tool against databases at each supported starting point: fresh, the previous released version,
-  and current (expect "nothing to do"). The incident shape this catches — "every past release
-  upgraded fine; *this* starting version explodes" — is invisible to any single-path test.
+  and current (expect "nothing to do"). The incident shape this catches - "every past release
+  upgraded fine; *this* starting version explodes" - is invisible to any single-path test.
 
 *Finish-guide tie:* §6 (the version guard is a guard-rail, not a warning); §2 (long jobs report
 progress).
@@ -699,33 +699,33 @@ progress).
 
 **Problem.** You're locked out of your own management UI: every admin membership was lost, the TLS
 certificate is broken or expired, or the service is stopped, hung, or refusing to start. The recovery
-path **cannot live inside the thing that's broken** — it must be a separate door with its own key.
+path **cannot live inside the thing that's broken** - it must be a separate door with its own key.
 
 **Shape.**
 - **A standalone console exe installed beside the service**, not hosted by it. It talks **directly to
   the database**, so it works with the service stopped, hung, or not installed at all.
-- **Elevation *is* the access gate.** The tool refuses to run without an elevated administrator token —
+- **Elevation *is* the access gate.** The tool refuses to run without an elevated administrator token -
   the OS only grants one to a member of the machine's Administrators group, so a successfully elevated
   process is itself the proof. **No login of its own** means no recovery-tool password to lose (the
   failure mode that would otherwise recreate the original problem one level down).
 - **It reuses the service's own configuration** (probes for `appsettings.json` beside it, one level up,
-  and in the service folder; `--config` overrides) — no second connection string to drift.
+  and in the service folder; `--config` overrides) - no second connection string to drift.
 - **Schema gate before anything writes.** On startup it verifies the database schema version against
-  its binaries and **refuses on mismatch** — a recovery tool must never "fix" you into a corrupted
+  its binaries and **refuses on mismatch** - a recovery tool must never "fix" you into a corrupted
   database (→ *Database console (fd-dbtool)* is the remedy it names).
 - **Status first: SCM + durable liveness.** It shows the Windows-service state *and* the heartbeat row
-  the service writes every ~30 s (→ §2) — which is what lets it tell **"hung"** (Running but heartbeat
+  the service writes every ~30 s (→ §2) - which is what lets it tell **"hung"** (Running but heartbeat
   stale, with a warning saying exactly that) from **"stopped."**
 - **Sole-writer discipline, with a backstop.** Before committing a change it offers (with confirmation)
   to **stop the service first**, so the tool is the sole writer; declining is *also* safe, because the
   service treats these rows as externally mutable source-of-truth and re-reads them (→ §3's short-TTL
-  group cache). On exit, it **offers to start the service again** — never leaves the operator with a
+  group cache). On exit, it **offers to start the service again** - never leaves the operator with a
   silently-stopped host.
-- **Scoped to recovery, not administration.** Exactly two *mutation* capabilities — TLS certificate
-  selection (store / PFX / clear-to-default) and permission-group restore — plus the operational
+- **Scoped to recovery, not administration.** Exactly two *mutation* capabilities - TLS certificate
+  selection (store / PFX / clear-to-default) and permission-group restore - plus the operational
   supports recovery itself needs: the status/liveness view and service stop/start (the shipped menu:
   status, cert from store, cert from PFX, clear cert, restore membership, stop, start). Everything
-  else belongs in the normal UI — a break-glass tool accumulating features becomes a second admin
+  else belongs in the normal UI - a break-glass tool accumulating features becomes a second admin
   surface with weaker controls.
 - **Every action is audited** into the *same* diagnostic log the UI reads (category `recovery`, the
   operator's identity stamped), so post-incident the break-glass activity appears right in the
@@ -733,12 +733,12 @@ path **cannot live inside the thing that's broken** — it must be a separate do
 - **Console finish.** The finish guide governs web UIs; a console tool has its own finish bar, visible
   here: a numbered menu loop with a **per-action try/catch** (one failed action never exits the
   session); refusals in plain language *with the remedy* ("Right-click and choose 'Run as
-  administrator'"); masked password entry; and each mutation **states when it takes effect** —
+  administrator'"); masked password entry; and each mutation **states when it takes effect** -
   membership "on the next authorization check," certificates "on the service's next start."
 
 **Contracts.**
 - A **separate process** with **direct DB access**; functional with the service down or absent.
-- **Elevation-gated; refuse, don't degrade** — and no credential of its own.
+- **Elevation-gated; refuse, don't degrade** - and no credential of its own.
 - **Schema-version check before any write.**
 - **Stop-before-write offered with confirmation**, an externally-mutable-state backstop when declined,
   and **offer-restart-on-exit**.
@@ -746,68 +746,68 @@ path **cannot live inside the thing that's broken** — it must be a separate do
 - A status view that pairs **service-manager state with durable liveness** to distinguish hung from stopped.
 
 **Implementation (FDP).**
-- `src/Dashboards.RecoveryTool/Program.cs` — the elevation gate (`WindowsPrincipal.IsInRole(Administrator)`,
+- `src/Dashboards.RecoveryTool/Program.cs` - the elevation gate (`WindowsPrincipal.IsInRole(Administrator)`,
   refuse with remedy).
-- `src/Dashboards.RecoveryTool/RecoveryApp.cs` — config probing, the `SchemaVersionGuard.CheckAsync`
+- `src/Dashboards.RecoveryTool/RecoveryApp.cs` - config probing, the `SchemaVersionGuard.CheckAsync`
   gate, `ShowServiceStatusAsync` (SCM + `LivenessStore` + the hung-warning), the action menu,
   `CommitWithServiceStoppedAsync` (the write discipline), `OfferStartOnExit`, `LogAsync` (the audit).
 - Seeded copies: `handoff/plantdatacache-2026-07-10/backend/recovery/` (Tier 2, go-by). The FDP-specific
   operator walkthrough is in the admin guide §III.9 (not template material).
 
 **To reuse / pitfalls.**
-- **Know your effect timing per action** — in FDP, a membership grant applies within seconds (short
+- **Know your effect timing per action** - in FDP, a membership grant applies within seconds (short
   cache TTL) but a certificate is only read at service start, so the stop/restart offer *matters* for
   certs and is optional for grants. Print the timing with the action; it's the difference between
   "fixed" and "why didn't it work."
-- **"Running" from the service manager is not proof of life** — only the durable heartbeat exposes a
+- **"Running" from the service manager is not proof of life** - only the durable heartbeat exposes a
   hung service. Pair them.
-- This is the **one place OS-admin matters** in the whole platform — everywhere else, AD/local-admin
+- This is the **one place OS-admin matters** in the whole platform - everywhere else, AD/local-admin
   deliberately grants nothing (§3). The pairing is intentional: platform roles for normal operation,
   machine ownership for break-glass. Document both halves together or each looks like a bug.
 - **Keep it boring.** A tool you run twice a year must have nothing on it that can rot; resist every
   feature that isn't recovery.
-- **Never reachable from the web UI** (finish §2) — no "launch recovery" button; the whole point is
+- **Never reachable from the web UI** (finish §2) - no "launch recovery" button; the whole point is
   independence from the broken surface.
 
-*Finish-guide tie:* §2 (guard-rails: confirm with consequences; refusals explain themselves — applied
+*Finish-guide tie:* §2 (guard-rails: confirm with consequences; refusals explain themselves - applied
 to a console), §6 (failure is a state with a named remedy, not a stack trace).
 
 ---
 
 ## 13. Database console (fd-dbtool)
 
-**Problem.** The schema lifecycle must never be service-driven — a service that auto-migrates on start
+**Problem.** The schema lifecycle must never be service-driven - a service that auto-migrates on start
 silently rewrites production data as a side effect of an upgrade (§11, KD-21). But *somebody* has to
 create the schema on a fresh install, apply migrations on upgrade, and restore from backup after a
-disaster — explicitly, scriptably (the installer calls it), and with the service stopped.
+disaster - explicitly, scriptably (the installer calls it), and with the service stopped.
 
 **Shape.**
 - **One console binary, four verbs**: `status` (report), `ensure --fresh-only` (create schema *only* on
-  an empty database), `apply` (migrate an existing one — the sole migration path), and
+  an empty database), `apply` (migrate an existing one - the sole migration path), and
   `restore <set>` (database + media from a backup set).
 - **Exit codes are the machine contract**: `0` up-to-date · `3` migration required · `4` fresh/empty ·
-  `1` usage · `2` failure. The **installer branches on them** — `ensure --fresh-only` at install
+  `1` usage · `2` failure. The **installer branches on them** - `ensure --fresh-only` at install
   (creates fresh, never migrates existing), `status` at upgrade to detect a needed migration, and the
   opt-in installer property runs exactly `apply`. Humans and scripts share one interface.
 - **Create and migrate are different verbs on purpose.** `ensure` on a behind database does *not*
-  migrate — it prints "back up the database, then run: fd-dbtool apply" and exits `3`. Implicit
+  migrate - it prints "back up the database, then run: fd-dbtool apply" and exits `3`. Implicit
   migration is the failure mode this tool exists to prevent; the boundary is the design.
-- **Execution is VERSION-GATED — never "run everything and trust the guards" (field-found,
+- **Execution is VERSION-GATED - never "run everything and trust the guards" (field-found,
   PlantDataCache/Prospector).** The migrate verb executes only migrations *above the database's
   recorded version* (EF's history table gives this for free; a hand-rolled numbered-SQL runner must
   key on the stamped schema version). A runner that re-runs the full sequence and relies on
   per-script `IF EXISTS` guards detonates the first time a later migration drops something an older
-  guard checks — the old script resurrects it (§11's era-bound-guards pitfall; on the 2008 R2 live
+  guard checks - the old script resurrects it (§11's era-bound-guards pitfall; on the 2008 R2 live
   box this ended in a row-size failure mid-install). A fresh database runs the full sequence; an
   existing one runs only its delta. **And the banner must match the behavior**: print the gate and
-  each script actually executed ("N script(s) above vX") — the pre-fix tool printed "migrating
+  each script actually executed ("N script(s) above vX") - the pre-fix tool printed "migrating
   v26 → v28" while re-running script 001, which actively delayed diagnosis.
 - **It reads the service's own configuration** (same probing as the recovery console; `--connection`
-  overrides) — the tool and the service can't disagree about which database is "the" database.
+  overrides) - the tool and the service can't disagree about which database is "the" database.
 - **Restore is guarded like the destructive act it is**: it prints a **restore plan** (set, database,
-  target media path), then requires the operator to **type the database name** — not `y` — to proceed
+  target media path), then requires the operator to **type the database name** - not `y` - to proceed
   (`--yes` for automation). It runs `RESTORE` against `master`, not the database being replaced.
-- **Cross-host aware.** SQL `BACKUP`/`RESTORE` execute on the **engine's** host — a remote engine
+- **Cross-host aware.** SQL `BACKUP`/`RESTORE` execute on the **engine's** host - a remote engine
   cannot read this host's local paths. The tool detects local-vs-remote engine and **refuses a local
   path with the exact fix** ("place the set on a UNC share both hosts can read"), instead of letting
   the engine fail with a baffling access error.
@@ -816,34 +816,34 @@ disaster — explicitly, scriptably (the installer calls it), and with the servi
   failures.
 
 **Contracts.**
-- **Verbs + exit codes are a stable API** — installers and scripts depend on them; changing a code is a
+- **Verbs + exit codes are a stable API** - installers and scripts depend on them; changing a code is a
   breaking change.
-- **No implicit migration, ever** — fresh-create and migrate are separate verbs; the migrate verb is an
+- **No implicit migration, ever** - fresh-create and migrate are separate verbs; the migrate verb is an
   explicit operator/installer act with a back-up-first warning.
 - **Migration execution is gated by the database's recorded version** (history table or stamped
-  integer) — per-script idempotency guards are a crash-resume aid, never the re-run protection.
+  integer) - per-script idempotency guards are a crash-resume aid, never the re-run protection.
 - **The tool's story must be recoverable when the installer runs it.** An MSI custom action sees only
-  the exit code and swallows stdout/stderr — so the tool keeps deterministic exit codes, writes
+  the exit code and swallows stdout/stderr - so the tool keeps deterministic exit codes, writes
   human-readable errors, and should also write a log file in a well-known location. The field recovery
   recipe until it does: administrative-extract the MSI (`msiexec /a <msi> TARGETDIR=<dir> /qn`) and
   run the tool by hand to see the real error.
 - **Same configuration source as the service.**
 - Destructive verbs = **plan + typed-name confirmation**, with a `--yes` escape hatch for automation.
-- **The engine reads paths on *its* host** — detect and refuse impossible paths with the remedy.
+- **The engine reads paths on *its* host** - detect and refuse impossible paths with the remedy.
 
 **Implementation (FDP).**
-- `src/Dashboards.DbTool/Program.cs` — verb dispatch, config probing, `status`/`ensure`/`apply` against
+- `src/Dashboards.DbTool/Program.cs` - verb dispatch, config probing, `status`/`ensure`/`apply` against
   EF's applied/pending migration lists, the exit-code map.
-- `src/Dashboards.DbTool/Restore.cs` (`RestoreRunner`) — the restore plan, typed-name confirmation,
+- `src/Dashboards.DbTool/Restore.cs` (`RestoreRunner`) - the restore plan, typed-name confirmation,
   master-connection rewrite, local-vs-remote engine detection (`DetectEngineAsync`) and the UNC refusal.
 - The counterpart guard: `src/Dashboards.DataAccess/SchemaVersionGuard.cs` + `Dashboards.Domain/SchemaInfo.cs`
   (§11). Installer integration: `deploy/installer-actions/CustomActions.cs`, `deploy/installer/Package.wxs`.
 - Seeded copies: `handoff/plantdatacache-2026-07-10/backend/schema/` (Tier 2, go-by).
 
 **To reuse / pitfalls.**
-- **Treat the exit codes as load-bearing** — the installer's conditional schema step is built on them.
+- **Treat the exit codes as load-bearing** - the installer's conditional schema step is built on them.
   Version them like an API.
-- **"Type the database name" beats "y/n"** for overwrite-everything operations — it forces the operator
+- **"Type the database name" beats "y/n"** for overwrite-everything operations - it forces the operator
   to read which database is about to be replaced. (Finish §2's confirm-with-consequences, in console form.)
 - **The remote-engine trap is real**: `RESTORE FROM 'C:\...'` with the engine on another host fails
   with an error that looks like permissions. Detecting it and naming the UNC fix turns a support call
@@ -851,12 +851,12 @@ disaster — explicitly, scriptably (the installer calls it), and with the servi
 - **Ship it beside the service** so it inherits the same `appsettings.json`; a second configured
   connection string *will* eventually point somewhere else.
 - The 65-update / 8-migration field record behind this shape: the discipline held because the tool made
-  the safe path the easy path — `status` is free, `apply` is one word, and nothing migrates by surprise.
-- **A failed install leaves honest wreckage — know what survives (field-found,
+  the safe path the easy path - `status` is free, `apply` is one word, and nothing migrates by surprise.
+- **A failed install leaves honest wreckage - know what survives (field-found,
   PlantDataCache/Prospector).** MSI rollback removes only what the MSI tracked: files written by
   custom actions survive as husks, and **database changes made by a failed provisioning run survive
   entirely** (DDL is not transactionally tied to the installer). A failed schema-bearing install is
-  therefore not "nothing happened" — inspect the recorded schema version and plan a *cleanup
+  therefore not "nothing happened" - inspect the recorded schema version and plan a *cleanup
   migration* (a new, higher-numbered script that re-drops/repairs; never a hand-edit of history) if
   the failed run mutated anything.
 
@@ -865,28 +865,28 @@ consequences), §6 (failure states carry the fix, not just the fact).
 
 ---
 
-## Appendix — Feature patterns
+## Appendix - Feature patterns
 
 More domain-specific than the verticals above, but each carries a reusable idea worth naming. Brief
 treatment; see the cited files for depth.
 
-- **Broadcasting / emergency override** — `Services/BroadcastService.cs`, `BroadcastResolution.cs`,
+- **Broadcasting / emergency override** - `Services/BroadcastService.cs`, `BroadcastResolution.cs`,
   `Entities/Broadcasting.cs`. *Reusable idea:* a **render-time override of normal routing**. A channel
   names a target dashboard and a membership (an explicit set, or a dynamic "all stations" rule); at
   resolve time the **most-recently-activated** matching channel wins, and deactivation falls straight
-  back to the station's real assignment — the override **never mutates** it. Generalizes to any
+  back to the station's real assignment - the override **never mutates** it. Generalizes to any
   alert / maintenance / lockdown "force a view onto a fleet" need.
-- **Backup / restore** — `Services/BackupService.cs`, `RemoteBackupSupport.cs`,
+- **Backup / restore** - `Services/BackupService.cs`, `RemoteBackupSupport.cs`,
   `docs/CROSS_HOST_SQL_BACKUP.md`. *Reusable idea:* a **consistent snapshot** taken by **quiescing the
   GC** for the window (so config never references a just-collected file), plus a **cross-host DB backup**
-  technique — the engine writes under *its own* identity to a single-principal UNC share, so you grant
+  technique - the engine writes under *its own* identity to a single-principal UNC share, so you grant
   the SQL host's **machine/service account**, not the operator. Retention keeps N newest; restore is the
   out-of-band dbtool (→ *Database console (fd-dbtool)*).
-- **Export / import** — `Controllers/DashboardsController.cs` (export/import), `Dtos/DraftModels.cs`
+- **Export / import** - `Controllers/DashboardsController.cs` (export/import), `Dtos/DraftModels.cs`
   `DashboardExport`. *Reusable idea:* a **self-describing JSON portability format** (a `format` stamp +
   the entity model + its *referenced* sub-entities) with **resolve-by-id-then-by-name** on import and an
   actionable failure ("import widget type 'X' first"). Import lands as a **draft**, never a live change.
-- **Station pairing / registration** — `Entities/Stations.cs` (`PendingStation` / `Station`),
+- **Station pairing / registration** - `Entities/Stations.cs` (`PendingStation` / `Station`),
   `Services/StationService.cs`. *Reusable idea:* a **persistent device token** (issued on first boot,
   survives everything) plus a **human-readable pairing code** an operator claims in the admin UI;
   claiming **rebinds the already-open live connection** so the screen flips holding-page→live without
@@ -897,7 +897,7 @@ treatment; see the cited files for depth.
 
 *This document and `WEB_UI_FINISH_GUIDE.md` are the two halves of the template: build a screen to the
 finish guide, build a capability to these patterns. Both are grounded in the Facility Dashboard Platform
-— carry the shapes forward, fork the code.*
+- carry the shapes forward, fork the code.*
 
 ---
 
@@ -905,7 +905,7 @@ finish guide, build a capability to these patterns. Both are grounded in the Fac
 
 | Rev | Date | Changes |
 |---|---|---|
-| 1.3 | 2026-10-08 | PlantDataCache (Prospector) field feedback — the 1.1.54 live-install migration failure (SQL 2008 R2; post-mortem at bmx.Historical_Queries `docs/references/DB_MIGRATION_PRACTICES.md`): §11 gains four pitfalls (era-bound idempotency guards + immutable shipped migrations; `DROP COLUMN` ghost space → `REBUILD` in the same migration; engine-floor *physical* semantics such as pre-2012 row-rewriting `ADD NOT NULL DEFAULT`; upgrade-matrix testing with the real tool). §13 gains the version-gated-runner shape bullet and contract (gating by recorded version, never run-everything-and-trust-guards; banner matches behavior), the installer-swallows-output contract (tool writes its own recoverable story; `msiexec /a` extraction recipe), and the rollback-wreckage pitfall (DB changes survive a failed install; plan cleanup migrations). |
+| 1.3 | 2026-10-08 | PlantDataCache (Prospector) field feedback - the 1.1.54 live-install migration failure (SQL 2008 R2; post-mortem at bmx.Historical_Queries `docs/references/DB_MIGRATION_PRACTICES.md`): §11 gains four pitfalls (era-bound idempotency guards + immutable shipped migrations; `DROP COLUMN` ghost space → `REBUILD` in the same migration; engine-floor *physical* semantics such as pre-2012 row-rewriting `ADD NOT NULL DEFAULT`; upgrade-matrix testing with the real tool). §13 gains the version-gated-runner shape bullet and contract (gating by recorded version, never run-everything-and-trust-guards; banner matches behavior), the installer-swallows-output contract (tool writes its own recoverable story; `msiexec /a` extraction recipe), and the rollback-wreckage pitfall (DB changes survive a failed install; plan cleanup migrations). |
 | 1.2 | 2026-07-17 | Observatory field feedback: §12's "exactly two capabilities" corrected to the shipped recovery menu (two mutation capabilities + status/liveness + service stop/start); §11 gains the EXEC-wrap rule for view/proc DDL in migrations (a bare `CREATE OR ALTER` silently breaks the regenerated idempotent DBA script). |
-| 1.1 | 2026-07-12 | Added §12 *Break-glass recovery console* and §13 *Database console (fd-dbtool)* — both promoted from passing mentions (§3 bullet, §11 pitfall) to full five-beat patterns, driven by downstream field use (multiple consuming projects hit the same needs). Cross-references added in §3, §11, and the backup/restore appendix entry. Filename carries the revision. |
+| 1.1 | 2026-07-12 | Added §12 *Break-glass recovery console* and §13 *Database console (fd-dbtool)* - both promoted from passing mentions (§3 bullet, §11 pitfall) to full five-beat patterns, driven by downstream field use (multiple consuming projects hit the same needs). Cross-references added in §3, §11, and the backup/restore appendix entry. Filename carries the revision. |
 | 1.0 | 2026-07-09 | Initial extraction from FDP: §1–11, feature-pattern appendix, self-contained-handoff framing. First consumer: PlantDataCache. |
