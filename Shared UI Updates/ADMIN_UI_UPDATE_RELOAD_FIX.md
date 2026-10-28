@@ -71,9 +71,12 @@ a red banner whose heartbeat does not carry version information forward.
 
 ---
 
-## The correction (two parts)
+## The correction
 
-### 1. Make the heartbeat feed the version watch (the real fix)
+There is **one required fix** (part 1) and **one optional belt-and-suspenders** (part 2). The
+reference implementation (FDP) ships part 1 only - see "On part 2" below for why.
+
+### 1. Make the heartbeat feed the version watch (the real fix - REQUIRED)
 
 On a successful heartbeat response, read the version header off the `fetch` response and feed it to the
 version watch, exactly as the HttpClient interceptor would. A **same-origin** `fetch` can read any
@@ -109,12 +112,12 @@ automatically within one heartbeat interval, with no HttpClient traffic required
 (raw `fetch`, `navigator.sendBeacon`, a WebSocket handshake you can read headers from, etc.) **must
 feed the version watch itself**. Do not "optimize" this line back out.
 
-### 2. Give the red connectivity banner a Reload button (belt-and-suspenders)
+### 2. Give the red connectivity banner a Reload button (belt-and-suspenders - OPTIONAL)
 
 A full reload always recovers, even in the rarer case where a parked tab genuinely cannot
 re-establish its live connection after a restart (a dead keep-alive socket, a re-auth the background
-request cannot satisfy silently). So the red banner should also offer Reload, making "a reload is one
-click away" true regardless of which banner is showing.
+request cannot satisfy silently). A Reload button on the red banner makes "a reload is one click
+away" true regardless of which banner is showing.
 
 ```html
 <div class="conn-banner" *ngIf="conn.state() === 'reconnecting'">
@@ -126,6 +129,14 @@ click away" true regardless of which banner is showing.
 
 `reloadNow()` is just `location.reload()`. Give the secondary button a lighter (outline) style so the
 two actions are visually distinct.
+
+**On part 2 (why FDP does not ship it):** part 1 fixes the reported bug on its own - the yellow
+"Reload now" banner raises automatically after an update. Part 2 only covers the rarer case above,
+where the red banner stays up because the live connection never returns (not a version-skew case, so
+the yellow banner does not apply). If that case is realistic for your users AND pressing **F5** is not
+an acceptable fallback, add the button. FDP's user base is engineers and admins for whom F5 is fine,
+so FDP removed part 2 (commit `917c2a6`) in favour of a UI that self-heals with no extra manual
+control. Decide per project; part 1 is non-negotiable, part 2 is a judgement call.
 
 ---
 
@@ -150,7 +161,8 @@ the banner that stopped appearing.
 3. Expected: a brief red "unreachable" banner during the restart, then - within ~one heartbeat
    interval of the service returning - the **yellow "Reload now" banner appears on its own**. Clicking
    it loads the new bundle. No F5 required.
-4. Separately, while the service is down, confirm the red banner now shows a working **Reload** button.
+4. (Only if you added part 2) While the service is down, confirm the red banner shows a working
+   **Reload** button.
 
 ---
 
@@ -160,5 +172,6 @@ the banner that stopped appearing.
 - [ ] Confirm the version interceptor observes that header on HttpClient responses (baseline + skew).
 - [ ] Find every **non-HttpClient** probe of the service (raw `fetch`, beacon, health ping). For each,
       read the version header and feed the version-observe function.
-- [ ] Add a Reload button to the connectivity/"unreachable" banner.
+- [ ] (Optional) Add a Reload button to the connectivity/"unreachable" banner - only if a parked tab
+      failing to reconnect is realistic for your users and F5 is not an acceptable fallback (see part 2).
 - [ ] Verify with the real restart path (above), not just a dev reload.
